@@ -1,0 +1,227 @@
+<!DOCTYPE html>
+<html>
+<head>
+	<!-- This is the TITLE of our webpage -->
+	<title>Celbridge-Leixlip-Maynooth Web Map</title>
+
+	<!-- You should not need to edit any of the lines below here until you pass the line which says 
+	<body> -->
+	
+	<!-- these three lines are for the Web Browser to figure out how to display this page
+	in the best way on your device screen -->
+	<meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"/>
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+	<!-- And JQuery - one of the most important Javascript libraries on the Internet today -->
+	<script src="https://code.jquery.com/jquery-3.2.1.min.js"></script>
+    
+
+	
+	<!-- Latest Bootstrap CSS -->
+	<link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0-beta.2/css/bootstrap.min.css" integrity="sha384-PsH8R72JQ3SOdhVi3uxftmaW6Vc51MKb0q5P2rRUpPvrszuE4W1povHYgTpBfshb" crossorigin="anonymous">
+
+	<script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.12.3/umd/popper.min.js" integrity="sha384-vFJXuSJphROIrBnz7yo7oB41mKfc8JzQZiCq4NCceLEaO4IHwicKwpJf9c9IpFgh" crossorigin="anonymous"></script>
+	<script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0-beta.2/js/bootstrap.min.js" integrity="sha384-alpBpkh1PFOepccYVYDB4do5UnbKysX5WZXm3XxPqe5iKTfUKjNkCk9SaVuEZflJ" crossorigin="anonymous"></script>
+
+	<!-- This is the link to Leaflet for the CSS file and its Javascript file -->
+	
+	<link rel="stylesheet" href="https://unpkg.com/leaflet@1.2.0/dist/leaflet.css"
+   integrity="sha512-M2wvCLH6DSRazYeZRIm1JnYyh22purTM+FDB5CsyxtQJYeKq83arPe5wgbNmcFXGqiSH2XR8dT/fJISVA1r/zQ=="
+   crossorigin=""/>	
+	
+   <!-- Make sure you put this AFTER Leaflet's CSS -->
+	<script src="https://unpkg.com/leaflet@1.2.0/dist/leaflet.js"
+   integrity="sha512-lInM/apFSqyy1o6s89K4iQUKg6ppXEgsVxT35HbzUupEVRh2Eu9Wdl4tHj7dZO0s1uvplcYGmt3498TtHq+log=="
+   crossorigin=""></script>    
+    
+</head>
+
+<body>
+	  <div class="container-fluid">
+		 <div class="row"> 
+			 <!-- This is the start of your web page -->
+		
+				<h1  class="display-4">Celbridge-Leixlip-Maynooth Web Map</h1>
+	
+	<div id="map" style="width: 100%; height: 800px"></div>
+
+
+	<script>
+<!-- Starting latitude and longitude of the center of the map -->
+<!-- Here is the CENTER coordinates of our map -->
+var LatitudeCenter = 53.344896; 
+var LongitudeCenter = -6.543607;
+    
+
+<!-- here is the starting zoom level of our map -->
+var ZoomLevel = 13;
+var mymap = L.map('map', {
+    center: [LatitudeCenter,  LongitudeCenter],
+    zoom: ZoomLevel
+});
+
+<!-- select our background layers - usually from the Leaflet Layer Providers website -->
+<!-- The first layer here will be the one which is 'switched on' when the user loads the page -->
+
+var OpenStreetMap_Mapnik = L.tileLayer('http://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+	maxZoom: 19,
+	attribution: '&copy; <a href="http://www.openstreetmap.org/copyright">OpenStreetMap</a>'
+});
+mymap.addLayer(OpenStreetMap_Mapnik);
+
+var Esri_WorldImagery = L.tileLayer('http://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
+	attribution: 'Tiles &copy; Esri &mdash; Source: Esri, i-cubed, USDA, USGS, AEX, GeoEye, Getmapping, Aerogrid, IGN, IGP, UPR-EGP, and the GIS User Community'
+});
+mymap.addLayer( Esri_WorldImagery);
+             
+var myGeoJSONIntervalStyle1 = {
+    "color": "#ffffb2",
+    "weight": 5,
+    "opacity": 0.6,
+    "dashArray": 3,
+    "fillColor": "#ffffb2",
+    "fillOpacity": 0.8
+};
+var myGeoJSONIntervalStyle2 = {
+    "color": "#fecc5c",
+    "weight": 5,
+    "opacity": 0.6,
+    "dashArray": 3,
+    "fillColor": "#fecc5c",
+    "fillOpacity": 0.8
+};
+        
+var myGeoJSONIntervalStyle3 = {
+    "color": "#fd8d3c",
+    "weight": 5,
+    "opacity": 0.6,
+    "dashArray": 3,
+    "fillColor": "#fd8d3c",
+    "fillOpacity": 0.8
+};        
+       
+var myGeoJSONIntervalStyle4 = {
+    "color": "#f03b20",
+    "weight": 5,
+    "opacity": 0.6,
+    "dashArray": 3,
+    "fillColor": "#f03b20",
+    "fillOpacity": 0.8
+};        
+        
+var myGeoJSONIntervalStyle5 = {
+    "color": "#bd0026",
+    "weight": 5,
+    "opacity": 0.6,
+    "dashArray": 3,
+    "fillColor": "#bd0026",
+    "fillOpacity": 0.8
+};        
+        
+
+<!-- Accessing a FILE which contains GeoJSON -->        
+<!-- This is where we are going to get Javascript to gather the GeoJSON and make it available-->
+<!-- so that Leaflet can display it -->
+<!-- We need to make a special LAYER for our GeoJson -->
+<!-- We are going to make a group for our overlay layer  -->
+var myGeoJSONLayer1 = L.layerGroup(); 
+        
+$.getJSON("./clm_web_map_small_areas.geojson",  
+     function(data) {
+        <!-- This is a piece of Javascript from JQUERY - it handles all of the collection of the GeoJSON from the File. It puts the GeoJSON into the variable below - just like we seen in previous examples -->
+        <!-- We also tell Leaflet that there is an action to perform if the user clicks on a feature on the map -->
+       <!-- STYLE for INTERVALS - now we get Leaflet to apply a STYLE to each of the features -->
+    
+        var geoJsonFromExternalFile1 = L.geoJson(data,{onEachFeature: action_To_Perform_When_Feature_Is_Clicked_On_The_Map,style:specific_style_for_geojsonINTERVALS});
+
+        myGeoJSONLayer1.addLayer(geoJsonFromExternalFile1).addTo(mymap); 
+     }
+  ); // This ends the code to get the GeoJSON from a FILE
+
+var myGeoJSONLayer2 = L.layerGroup(); 
+        
+$.getJSON("./clm_web_map_stop_points.geojson",  
+     function(data) {
+        <!-- This is a piece of Javascript from JQUERY - it handles all of the collection of the GeoJSON from the File. It puts the GeoJSON into the variable below - just like we seen in previous examples -->
+        <!-- We also tell Leaflet that there is an action to perform if the user clicks on a feature on the map -->
+    
+        var geoJsonFromExternalFile2 = L.geoJson(data,{onEachFeature: action_To_Perform_When_Feature_Is_Clicked_On_The_Map});
+
+        myGeoJSONLayer2.addLayer(geoJsonFromExternalFile2).addTo(mymap); 
+     }
+  ); // This ends the code to get the GeoJSON from a FILE
+
+
+<!-- Create the information for the layer switcher so users know which background layer is on or off -->
+var backgroundLayerNames = {"ESRI Aerial": Esri_WorldImagery, "OpenStreetMap Streets": OpenStreetMap_Mapnik};
+
+<!-- Create the information for the layer switcher so users know which foreground layer is on or off -->
+var overlayGeoLayerNames = {"House Price Performance":myGeoJSONLayer1, "Bus Stops":myGeoJSONLayer2};
+
+<!-- This creates the layer switcher in the top corner of your map container -->
+<!-- This allows you to switch between the layers - turning them on or off -->
+L.control.layers(backgroundLayerNames,overlayGeoLayerNames).addTo(mymap);
+    
+
+// This function checks every feature in the GeoJSON and looks at the avg_pct_price_rise_pa property (careful - it is case sensitive)
+function specific_style_for_geojsonINTERVALS(feature) {
+    if (feature.properties.avg_pct_price_rise_pa !== null) // check that this property is not null
+    {
+		if ((feature.properties.avg_pct_price_rise_pa >= 0) && (feature.properties.avg_pct_price_rise_pa <= 5)) 
+            return myGeoJSONIntervalStyle1;
+
+        if ((feature.properties.avg_pct_price_rise_pa > 5) && (feature.properties.avg_pct_price_rise_pa <= 14)) 
+            return myGeoJSONIntervalStyle2;
+
+        if ((feature.properties.avg_pct_price_rise_pa > 14) && (feature.properties.avg_pct_price_rise_pa <= 27)) 
+            return myGeoJSONIntervalStyle3;    
+
+        if ((feature.properties.avg_pct_price_rise_pa > 27) && (feature.properties.avg_pct_price_rise_pa <= 65)) 
+            return myGeoJSONIntervalStyle4;    
+
+        if ((feature.properties.avg_pct_price_rise_pa > 65) && (feature.properties.avg_pct_price_rise_pa <= 145)) 
+            return myGeoJSONIntervalStyle5;       
+    }
+} // end of our STYLE DECISION for CLASSES or INTERVALS.    
+    
+
+    
+// This is where Leaflet will go if you click on any of the objects which are in the 
+// GeoJSON file
+function action_To_Perform_When_Feature_Is_Clicked_On_The_Map(feature, layer) {
+    // does this clicked feature have any properties in its GeoJSON?
+    // does it have any attributes?
+    if (feature.properties)
+    {
+		// Each feature in the GeoJSON dataset has a Feature Object. 
+		// This object has a list of properties (an array). We get 
+		// Javascript to map these to a string. We put some HTML formatting in the string
+		// This is then bound to the popup. 
+		// There is the option to access specific attributes (properties) by name 
+		// For example: feature.properties.place for the place attribute
+		layer.bindPopup(
+			Object.keys(feature.properties).map(
+			function(k) {
+						return "<b>" + k + "</b>" + ": " + feature.properties[k];
+						}
+					).join("<br />"), 
+
+					{
+						maxHeight: 200
+					});
+										
+	} // end if
+} // end of function action_To_Perform_When_Feature_Is_Clicked_On_The_Map   
+    
+    
+</script>
+	
+<!-- This is the end of your web page -->
+ <!-- You should not change any code below this line -->
+<!-- If you change the code below here and it is incorrect 
+then your web page will not display correctly -->
+
+	</div> <!-- end a row -->	
+</div> <!-- close the container -->
+</body>
+</html>
