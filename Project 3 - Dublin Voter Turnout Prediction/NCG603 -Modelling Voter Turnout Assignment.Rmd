@@ -1,0 +1,680 @@
+---
+title: 'NCG603 - Modelling Voter Turnout Assignment'
+author: "Sean O'Riogain (18145426)"
+date: "8 May 2019"
+output: html_document
+---
+
+```{r setup, include=TRUE}
+knitr::opts_chunk$set(echo = TRUE)
+getwd()                   # Display the current working directory
+suppressPackageStartupMessages(library(tidyverse))  # Needed for dplyr functions etc.
+suppressPackageStartupMessages(library(GWmodel))    # Needed for GWR functions
+suppressPackageStartupMessages(library(car))        # Needed for Boxplot()
+suppressPackageStartupMessages(library(classInt))   # Needed for ClassIntervals()
+suppressPackageStartupMessages(library(RColorBrewer)) # Needed for Palette() etc.
+suppressPackageStartupMessages(library(spdep))      # Needed for moran() etc.
+suppressPackageStartupMessages(library(gclus))      # Needed for cpairs() etc.
+suppressPackageStartupMessages(library(sqldf))      # Needed for sqldf() etc.
+suppressPackageStartupMessages(library(OutlierDetection)) # Needed for OutlierDetection() etc.
+suppressPackageStartupMessages(library(leaps))      # Needed for regsubsets()
+suppressPackageStartupMessages(library(MASS))       # Needed for stepAIC()
+suppressPackageStartupMessages(library(gridExtra))  # Needed for gridArrange()
+
+data(DubVoter)            # Get the relevant spatial dataframe
+str(Dub.voter@data)       # Display the structure of the dataframe's data slot
+```
+
+<P style="page-break-before: always">
+
+# Introduction
+
+## Objective
+
+The aim of this assignment is to predict the variation in voter turnout across the 322 electoral districts (ED) in Dublin for the General Election of 2002.
+
+## Context
+
+To enable us to do this we have a spatial polygons dataframe for those areal units which, in its data slot, contains a row for each ED with a value in each of their 12 columns (variables). Refer to the results of the most recent command above for the structure of that dataset.
+
+Those 12 variables can be broken down into the following categories:
+
+- The first variable contains a unique identifier for each row/ED;
+- the next 2 contain the coordinates (of their centroids, presumably);
+- the next 5 contain socio-economic (percentage) metrics that are considered to be important predictors of voter participation (e.g. percentage unemployed and percentage of low educational attainment);
+- the next 3 socio-economic variables contain the percentage value of the ED's population in each of 3 key voting-eligible age groups;
+- and the final (response) variable provides the actual percentage of the electorate that turned out to vote in each ED for the election in question.
+
+## Approach
+
+As the last variable referred to above contains the values that we are required to predict, we will be using a suitable, supervised machine learning technique to do so.
+
+Before selecting that technique, we will do due diligence on the dataset itself by assessing its level of data quality (e.g. in terms of valid value ranges, completeness etc.), and by looking for the presence of outliers and collinearity and the extent of same. 
+
+# Data Quality Analysis
+
+In this section, we will look at the dataset, variable by variable, and assess the level of data quality as well as its spatial distribution in each case. 
+
+## DED_ID (Unique Identifier)
+
+Here, we will assess whether or not this variable provides a unique identifier for each row in the dataset (and for which spatial distibution is not relevant).
+
+```{r qa_ded_id_uniq, include=TRUE}
+paste("DED_ID values are unique? =",             # Check for uniqueness
+      length(Dub.voter$DED_ID)==length(unique(Dub.voter$DED_ID)))
+```
+
+<P style="page-break-before: always">
+
+## X and Y (Coordinates)
+
+We will now attempt to draw a map showing the distribution of the response variable (GenEl2004) to ensure that the dataset refers to EDs in the Dublin area only.
+
+```{r qa_xy_map, include=TRUE}
+quickMap3 <- function(SPDF,Var,nClass=9,dp=0,plotVar=FALSE){
+   Classes <- classIntervals(Var,nClass,method="quantile",dataPrecision=dp)
+   Palette <- brewer.pal(nClass,"Reds")
+   Colours <- findColours(Classes,Palette)
+   plot(SPDF,col=Colours)
+   legend("bottomright",
+      legend=names(attr(Colours,"table")),
+      fill=attr(Colours,"palette"),
+      cex=0.75,bty="n")
+   box()
+   if(plotVar) {
+      xy <- coordinates(SPDF)
+      text(xy[,1],xy[,2],round(Var,dp),col="blue",cex=0.5)
+   }
+}
+
+quickMap3(Dub.voter,Dub.voter$GenEl2004)
+```
+
+The above map confirms that we are dealing with EDs in the Dublin area only - i.e. no ED is an 'outlier' in that sense (as specified by its coordinates).
+
+We will now attempt to compare the values of the X and Y variables with those that were used to draw the map above:
+
+```{r qa_xy_coords, include=TRUE}
+coords<-data.frame(coordinates(Dub.voter),X2=Dub.voter$X,Y2=Dub.voter$Y)
+names(coords)<-c("x_poly","y_poly","x_data","y_data")
+head(coords)
+```
+
+We can see from the sample values above that both sets of coordinates do not quite match up. Having consulted with the data owner, Martin Charlton, we will now get both sets of coordinates in synch using the following code:
+
+```{r qa_xy_sync, include=TRUE}
+coords.new<-data.frame(X=coords$x_poly,Y=coords$y_poly)
+head(Dub.voter@data)[1:3]
+Dub.voter@data %>%
+  mutate(X=coords.new$X, Y=coords.new$Y) ->
+  Dub.voter@data
+head(Dub.voter@data)[1:3]
+```
+
+We can see from the final results above that the values of the X and Y coordinates in Dub.voter@data slot have been updated to the their equivalents from the Dub.voter@polygons slot.
+
+<P style="page-break-before: always">
+
+## DiffAdd (Percentage who changed address within the past year)
+
+Now let's take a look at the range of values for this variable.
+
+```{r qa_diff, include=TRUE}
+summary(Dub.voter$DiffAdd)
+
+spplot(Dub.voter,"DiffAdd")
+```
+
+The above results indicate a reasonable spread of valid percentage values for this variable. The map shows that there are population mobility hotspots in the city centre EDs, in the Dun Laoghaire area and the outer, northwestern suburbs.
+
+<P style="page-break-before: always">
+
+## LARent (Percentage of local authority renters)
+
+Now let's take a look at the range of values for this variable.
+
+```{r qa_larent, include=TRUE}
+summary(Dub.voter$LARent)
+which(Dub.voter$LARent==100)
+
+spplot(Dub.voter,"LARent")
+```
+
+The above results indicate a wide spread of valid percentage values for this variable. Later in this document we will take a closer look at the observations with the minimum (0) and maximum (100) values to assess the possibility of missing or outlier values.
+
+The map shows that those high-end outlier EDs in relation to public housing are primarily located primarily around the city centre and in the midwestern suburbs.
+
+<P style="page-break-before: always">
+
+## SC1 (Percentage of Social Class 1 people)
+
+Now let's take a look at the range of values for this variable.
+
+```{r qa_sc1, include=TRUE}
+summary(Dub.voter$SC1)
+
+spplot(Dub.voter,"SC1")
+```
+
+The above results indicate a reasonable spread of valid percentage values for this variable. The maps shows that the affluence hotspots are located around Dublin Bay (with the exception of the central port areas) and in certain midwestern EDs.
+
+<P style="page-break-before: always">
+
+## Unempl (Percentage of unemployed people)
+
+Now let's take a look at the range of values for this variable.
+
+```{r qa_unempl, include=TRUE}
+summary(Dub.voter$Unempl)
+
+spplot(Dub.voter,"Unempl")
+```
+
+The above results indicate a reasonable spread of valid percentage values for this variable. The map shows that the unemployment blackspots are sprinkled around some north-central and midwestern EDs.
+
+<P style="page-break-before: always">
+
+## LowEduc (Percentage who changed address within the past year)
+
+Now let's take a look at the range of values for this variable.
+
+```{r qa_loweduc, include=TRUE}
+summary(Dub.voter$LowEduc)
+
+spplot(Dub.voter,"LowEduc")
+```
+
+The above results indicate a reasonable spread of valid percentage values for this variable. However, later in this document we will take a closer look at occurences of the minimum value (0) to assess the possibility of them being missing values. Th map shows only 2 main educational attainment hotpots in the outer northeastern and southwestern suburbs, respectively.
+
+<P style="page-break-before: always">
+
+## Age18_24 (Percentage in the 18-24 Age Group)
+
+Now let's take a look at the range of values for this variable.
+
+```{r qa_age18_24, include=TRUE}
+summary(Dub.voter$Age18_24)
+
+spplot(Dub.voter,"Age18_24")
+```
+
+The above results indicate a reasonable spread of valid percentage values for this variable.The maps shows that some youthful hotspots are located in the city centre with a high-end on in the inner southern suburbes and in a small number of isolated outer suburbs.
+
+<P style="page-break-before: always">
+
+## Age25_44 (Percentage in the 25-44 Age Group)
+
+Now let's take a look at the range of values for this variable.
+
+```{r qa_age25_44, include=TRUE}
+summary(Dub.voter$Age25_44)
+
+spplot(Dub.voter,"Age25_44")
+```
+
+The above results indicate a reasonable spread of valid percentage values for this variable. The map shows that millennials are concentrated in the city centre and in a broad arc in the outer suburbs.
+
+<P style="page-break-before: always">
+
+## Age45_64 (Percentage in the 45-64 Age Group)
+
+Now let's take a look at the range of values for this variable.
+
+```{r qa_age45_64, include=TRUE}
+summary(Dub.voter$Age45_64)
+
+spplot(Dub.voter,"Age45_64")
+```
+
+The above results indicate a reasonable spread of valid percentage values for this variable. The map shows that the older generation are distributed across the EDs with some hotspots in the well-to-do suburbs at the north and south ends of Dublin Bay and its hinterland as well as some southwestern EDs.
+
+<P style="page-break-before: always">
+
+## GenEl2004 (Percentage Turnout)
+
+Now let's take a look at the range of values for this variable.
+
+```{r qa_genel2004, include=TRUE}
+summary(Dub.voter$GenEl2004)
+
+spplot(Dub.voter,"GenEl2004")
+```
+
+The above results indicate a reasonable spread of valid percentage values for this variable. This map shows a similar pattern to the previous one (re the older population) especially in the affluent suburbs at the southern and northern ends of Dulin Bay and its hinterland.  
+
+<P style="page-break-before: always">
+
+# Missing Data Analysis
+
+We will now look at the presence of missing date (NA) or potentially missing values (0) in this dataset.
+
+```{r miss, include=TRUE}
+miss_na<-function(x){sum(is.na(x))}      # Function to count NA values
+miss_0<-function(x){sum(x==0)}           # Function to count zero values
+
+apply(Dub.voter@data,2,miss_na)          # Count zero NA for all variables
+apply(Dub.voter@data,2,miss_0)           # Count zero values for all variables
+```
+
+The results above show that NA values are not present for any variable, that the LARent variable has 12 occurences of the zero value, and the LowEduc variable has 24 occurrences of the zero value.
+
+As the the proportion of zero values in both cases is relatively low, and because it is not unreasonable for the more prosperous EDs to have zero values for these 2 variables, we can conclude that those zero values do not represent missing values.
+
+<P style="page-break-before: always">
+
+# Outlier Analysis
+
+Outlier analysis is not appropriate for the first 3 columns because the first one is just a unique identifier and the other two are coordinates which have already been implicitly checked for outliers by the previous map plotting exercise.
+
+As we have not yet performed any variable (or model) selection, we will have to take a univariate approach to outlier detection (as opposed to a bivariate or multivariate one).
+
+We will now perform univariate outlier detection using the following functions:
+
+1. Boxplot() in the car library;
+2. UnivariateOutlierDetection() in the OutlierDetection library.
+
+In the case of the latter function, we will apply all of its available merthods (distance-, density- and depth-based) to identify the observations that are considered to be outliers by all of them.
+
+Finally, we will merge the results of both functions to find the observations which are common to both of them and then take a closer look at all of them, based on the weight of evidence provided by the use of multiple methods performed by both functions.
+
+## Using Boxplot()
+
+We will now display the observation (row) numbers where an outlier was detected for each variable:
+
+```{r out_box, include=TRUE, fig.show="hide"}
+# Get the observation numbers where an outlier was detected for each variable
+out.box.list<-apply(Dub.voter@data[,4:12],2,Boxplot,id=list(cex=0.5))
+str(out.box.list)
+```
+
+And the total number of outlier observations (overall and for unique observations):
+
+```{r out_box_tot, include=TRUE}
+# Get the total number of outlier observations
+out.box<-unlist(out.box.list)
+paste("Total (Overall) =",length(out.box))
+paste("Total (Unique)  =",length(unique(out.box)))
+```
+
+The results above show us that:
+
+- A total of 57 outlier values are present across the entire dataset
+    - in 44 of the 322 observations.
+- At least 1 outlier value was detected for all of those variables.
+- The maximum number of outliers per variable is 10.
+- The minimum number of outliers per variable is 2.
+
+<P style="page-break-before: always">
+
+## Using UnivariateOutlierDetection()
+
+We will now use this function to apply all of its methods to find all of outliers for each of the same variables as previously. Those methods are as follows:
+
+- Robust Kernal-based Outlier Factor(RKOF) algorithm
+- depthTools package
+- Generalised Dispersion (using LOO dispersion matrix)
+- Mahalanobis Distance (an observation and )based on the Chi square cutoff)
+- k Nearest Neighbours Distance
+- kth Nearest Neighbour Distance
+
+Only the numbers of observations that are identified as outliers by all of those methods is returned to provide the required weight of evidence.
+
+```{r out_uod, include=TRUE, fig.show="hide"}
+# This function runs all methods of UnivariateOutlierDetection() for the specified variable (x)
+UOD<-function(x){
+  obs<-try(UnivariateOutlierDetection(x,dist=T,depth=T,dens=T)$`Location of Outlier`)
+  
+  if (class(obs)=='try-error') {        # If no outliers found for a variable
+    return(as.integer(NA))              #   return NA
+  } else {                              # Otherwise
+    return(obs)                         #   return their observation numbers
+  }
+}
+
+out.uod.list<-apply(Dub.voter@data[,4:12],2,UOD)  # Invoke the function
+str(out.uod.list)                                 # Display a summary of its results
+```
+
+And the total number of outlier observations (overall and for unique observations):
+
+```{r out_uod_tot, include=TRUE}
+# Get the total number of outlier observations
+out.uod<-unlist(out.uod.list)
+paste("Total (Overall) =",length(out.uod))
+paste("Total (Unique)  =",length(unique(out.uod)))
+```
+
+The results above show us that, when all methods of UnivariateOutlierDetection() were applied:
+
+- A total of 24 outlier values are present across the entire dataset
+    - in 22 of the 322 observations.
+- No outliers were detected for 2 variables.
+- The maximum number of outliers per variable is 8.
+- The minimum number of outliers per variable is 1.
+
+We will now find the observation numbers that are common to both lists of outliers (as provided Boxplot() and UnivariateOutlierDetection(), respectively):
+
+```{r out_comp_ind, include=TRUE}
+# This function matches the contents of two lists (l1 and l2) and returns the indexes of matching values for each element in the form of another list (l)
+match.list<-function(l1,l2){
+  l<-vector("list",length(l1))             # Initialise the output list 
+  names(l)<-names(l1)                      #  and name its elements (based on l1)  
+
+  for(i in c(1:length(l))){                # Construct the output list
+    v<-intersect(unlist(l1[i]),unlist(l2[i]))   # Find the matching elements of l1 & l2
+    if(length(v)==0){v<-as.integer(NA)}    # If no matching element, use NA
+    l[[i]]<-v                              # Load the current list element
+  }
+
+return(l)                                  # Return the output list
+}
+
+out.both.list<-match.list(out.box.list,out.uod.list)# Invoke the function
+str(out.both.list)                                  # Display a summary of its results
+```
+
+And the total number of outlier observations (overall and for unique observations):
+
+```{r out_both_tot, include=TRUE}
+# Get the total number of outlier observations
+out.both<-unlist(out.both.list)
+paste("Total (Overall) =",sum(!is.na(out.both)))
+paste("Total (Unique)  =",sum(!is.na(unique(out.both))))
+```
+
+The results above show us that both functions have identified a total of 13 distinct outliers in common across the 322 observations. Let's take a look at their values now:
+
+```{r out_comp_val, include=TRUE}
+# This function uses a list of index values (list) to provide the values of the corresponding cells of the specified data frame (df)
+match.list.val<-function(list,df){
+  l<-vector("list",length(list))                # Initialise the output list
+  names(l)<-names(list)                         #   and name its elements based on list
+
+  for(i in c(1:length(list))){                  # Construct the output list (l)
+    v<-unlist(list[i])                          # Unlist the current index list element
+    l[[i]]<-df[,i][v]                           # Load the output list
+  }
+
+  return(l)                                     # Return the output list
+}
+
+out.both.list.val<-match.list.val(out.both.list,# Invoke the function
+                                  Dub.voter@data[,4:12])
+str(out.both.list.val)                          # Display a summary of its results
+```
+
+As of the values of the 13 (common) outliers appear to be unreasonable and they are rellatively small in number no further action is considered necessary.
+
+<P style="page-break-before: always">
+
+# Collinearity Analysis
+
+## Global Collinearity
+
+Firstly, let's see if we can detect any evidence of collinearity at the global level:
+
+```{r coll_glo, include=TRUE}
+data.cor<-cor(Dub.voter@data[,2:12])
+data.cor %>%
+  dmat.color()->cols
+cpairs(Dub.voter@data[,2:12],panel.colors=cols,pch=".",gap=.5)
+```
+
+The cpairs variant of the standard scatter plot matris (pair) provides a kind of heat map of the level of correlation exists between all variable pairings in the data set. It does this by cutting the correlation values of the variable pairings into 3 equal intervals (breaks): red for noteworthy positive correlation, cream for noteworthy negative correlation and blue for weak or no correlation.
+
+As can be seen from its output above, there is evidence of quite a bit of multicollinearity in the dataset under review, which also applies to its spatial (x-Y coordinate) variables.
+
+The following code will display the value intervals for the cream, blue and red colour codes above: 
+
+```{r coll_cut, include=TRUE}
+cormat<-cor(Dub.voter@data[,2:12])                  # Create the correlation matrix
+
+n<-nrow(cormat)                                     # Get number of rows
+
+for(i in c(1:n)){                                   # 'Blank' the redundant cells
+  for(j in c(i:n)){
+    cormat[i,j]<-NA
+  }
+}
+
+cut<-cut_number(cormat,3)                           # Cut cormat into 3 ranges
+levels(cut)                                         # Display the intervals/breaks
+```
+
+The above results tell us that the cream (noteworthy negative) interval covers Pearson r correlation values in the range -0.1 and below, the red (noteworthy positive) interval covers values in the range 0.1 and above, while the blue (weak or none) covers the range from 0.1 to -0.1.
+
+As we will be looking at local collinearity in the next section of the document, for now we will focus solely on the non-spatial variables.
+
+We will now take a closer look at the noteworthy correlations (both positive and negative) by producing a correlation matrix with a view to quantifying it in descending order of importance (as measured by the Pearson r values).
+
+```{r coll_cor, include=TRUE}
+cormat<-cor(Dub.voter@data[,4:12])                  # Create the correlation matrix
+
+n<-nrow(cormat)                                     # Get number of rows
+
+for(i in c(1:n)){                                   # 'Blank' the redundant cells
+  for(j in c(i:n)){
+    cormat[i,j]<-NA
+  }
+}
+
+cut<-cut_number(cormat,3)                           # Cut cormat into 3 ranges
+
+corind<-which(as.numeric(cut) %in% c(1,3))          # Find cells with highest cor value
+
+corrow<-corind %% n                                 # Convert cell index to row no.
+corcol<-corind %/% n + 1                            # Convert cell index to col. no.
+
+fix<-which(corrow==0)                               # corrow/corcol elements to fix
+corrow[fix]<-n                                      # Fix corrow
+corcol[fix]<-corcol[fix]-1                          # Fix corcol
+
+rowname<-attr(cormat,"dimnames")[[1]][corrow]       # Convert row number to name
+colname<-attr(cormat,"dimnames")[[2]][corcol]       # Convert column number to name
+val<-cormat[corind]                                 # Get r value
+
+cordf<-data.frame(rowname,colname,val)              # Create correlation data frame
+
+arrange(cordf,desc(abs(val)))                       # Display correlation data frame
+                                                    # (largest absolute r values first)
+```
+
+Now let's evaluate the top 10 (in terms of strength of correlation) for plausibility:
+
+1. People in the 25-44 age group in an ED are the most mobile in terms of changing address (plausible).
+2. EDs with the more people in the 45-64 age group have less in the 25-44 age bracket (plausible).
+3. EDs with a high proportion of unemployed people have a lower turnout rate (plausible).
+4. EDs with a high proportion of local authority renters have a lower turnout rate (plausible).
+5. EDs with a high proportion of unemployed people also have a high level of local authority renters (plausible).
+6. EDs with a high proportion of unemployed people have a lower proportion of well-off (SC1) people (plausible).
+7. EDs with a high proportion of people in the 45-64 age group have a lower proportion of people who have changed their address within the past 12 months (plausible).
+8. EDs with a high proportion of people in the 45-64 age group have a high turnout rate (plausible).
+9. EDs with a high proportion of people in the 45-64 age group have low proportions of local authority renters (not so obvious).
+10. EDs with a high proportion of people in the 25-44 age group have a low turnout rate (plausible).
+
+<P style="page-break-before: always">
+
+## Local Collinearity
+
+We will now perform a Moran's I test to see if the probability of local collinearity being present in the data is statistically significant for the variables of interest.
+
+```{r coll_loc, include=TRUE}
+nbl<-poly2nb(Dub.voter)               # Create a neighbours list for the SPDF
+print(nbl)
+wts<-nb2listw(nbl)                    # Create a weights matrix for the neighbours list
+print(wts)
+
+mt<-apply(Dub.voter@data[,4:12],      # Perform the moran test for the required vars.
+          2,moran.test,wts)
+
+v<-vector("double",length(mt))              # Initialise the output vector
+names(v)<-names(Dub.voter@data[,4:12])      #   and name its elements based on vector
+
+for(i in c(1:length(mt))){                  # Load the ouput vector
+  v[i]<-mt[[i]][2]
+}
+
+str(v)                                      # Display a summary of the results
+
+v[which(v>0.05)]                            # Any high p-values?
+```
+
+The p-values resulting from the above test indicate that only one variable (LowEduc) has a p-value greater than 0.05 and, therefore, we cannot reject the null hypothesis for it (i.e. zero spatial autocorrelation present). 
+
+Corollarily, the null hypothesis can be rejected for the other variables which indicates that spatial autocorrelation is present for them.
+
+<P style="page-break-before: always">
+
+# Variable (Feature) Selection
+
+Before we can begin modelling, we must first identify the set of predictors that are most likely to predict the response variable most accurately. In so doing, we must ensure that the model is not overfitted because its predictive power for other similar datasets (e.g. the same type voter data in other areas for the same election or in the same area for other elections) could be impaired.
+
+For linear regression two of the most commonly used measures for assessing a model's goodness of fit are Mallow's $C_p$ and the Akaike Information Criterion (AIC) which a designed to avoid overfitting.
+
+Stepwise linear regression is the process of systemmatically evaluating models with different combinations of predictors by calculating the relevant goodness of fit metric for each one and choosing the combination the results in the lowest value.These techniques can typically be configured to run in a forward (starting with one predictor and systematically add others) or a backward direction (starting with all predictors and systematically remove predictors) or in both firections (sometimes referred to as an exhaustive approach).
+
+R provides a number of different functions for performing stepwise regression of which we will now use the following ones (in both directions):
+
+- regsubsets() in the leaps package (which uses $C_p$ as its metric);
+- steps() in the base stats package (which uses AIC as its metric);
+- stepAIC() in the MASS package (which also uses AIC as its metric).
+
+We will also use Geographically Weighted Principle Component Analysis (PCA) to sanity-check the outcome of the stepwise regression approach.
+
+## Using lm() and p-Values
+
+But before we perform stepwise regression, let's fit a linear regression model for all predictors and look at the p-values for the predictors in the resultant fit which it considers to be the most significant variables statistically.
+
+```{r select_lm, include=TRUE}
+# Fit a model with all (9) predictors
+f.lm <- lm(GenEl2004 ~ .,data = Dub.voter@data[,4:12])
+summary(f.lm)
+```
+
+The results above indicate the following predictors are significant in descending order of probability: Unempl, LARent, Age25_44 and Age18_24. Interestingly, their coefficient estimate values are all negative which indicates that the higher their percentage values are in a particular ED the lower the turnout is likely to be there. Intuitively, this seems to make sense because turnout in deprived areas (where Unempl and LARent values can be relatively high) is expected to be lower and turnout is known to be higher among senior citizens relative to the younger age groups (as measured by the Age25_44 and Age45_64 predictors).
+
+Let's go ahead and perform the types of stepwise regression referred to above to see how the combination of those 4 predictors compares with many other predictor combinations.
+
+## Using regsubsets() and $C_p$ Values
+
+Firstly, we run the stepwise regression function and store its key results:
+
+```{r select_regs, include=TRUE}
+f.regs<-regsubsets(GenEl2004 ~ .,# Run the stepwise regression function
+                   data=Dub.voter@data[,4:12])
+
+f.regs.sum<-summary(f.regs)      # Store the results
+
+cp<-f.regs.sum$cp                # Extract the Cp values for all stepwise models
+np<-rowSums(f.regs.sum$which)-1  # Extract the number of predictors for each too
+```
+
+We now plot the $C_p$ value achieved versus the number of predictors for the favoured predictor combination for each number of predictors.
+
+```{r select_regs_plot, include=TRUE}
+# Plot the cp value against the number of predictors       
+plot(np, cp, pch=16, xlab="Number of predictors")
+lines(np, cp)
+```
+
+The above plot indicates that best 4-predictor combination achieved the lowest $C_p$ value.
+
+Finally, let's get the names of the predictors in that combination and display them:
+
+```{r select_regs_vars, include=TRUE}
+# Extract the recommended variable names
+terms<-attr(which(f.regs.sum$which[4,]),"names")
+terms[2:length(terms)]
+```
+
+The results above agree with those achieved during the preliminary study using lm() and p-values.
+
+So let's see what lm()'s p-values look like now if we fit a model with only those 4 predictors:
+
+```{r select_lm_4, include=TRUE}
+# Fit a model with all (9) predictors
+f.lm.4 <- lm(GenEl2004 ~ LARent + Unempl + Age18_24 + Age25_44,
+             data = Dub.voter@data[,4:12])
+summary(f.lm.4)
+```
+
+The p-values in the results above show (not unexpectedly) that the statistical significance of those 4 predictors has increased, especially for Age18_24, although their relative significance has changed slightly in terms of descending order of p-values: Unempl, Age25-44, LARent and Age18_24 (LARrent has swapped position with Age25_44). All of their coefficient estimates remain in negative territory.
+
+<P style="page-break-before: always">
+
+## Using Step() and AIC Values
+
+Now let's run this stepwise regression function, which uses AIC instead of $C_p$ as its goodness of fit measurement and the all-predictor regression model as its starting point, and display its results:
+
+```{r select_step, include=TRUE}
+# Perform stepwise model fitting (direction=backward by default)
+f.step<-step(f.lm, direction="both", trace=F)
+
+# Summarise the predictors that are recommended to be dropped
+f.step$anova
+```
+
+The results above recommend dropping the following predictors: LowEduc, DiffAdd, Age45_64 and SC1, leaving us with LARent, Unempl, Age18_24 and Age25_44 as the recommended predictors yet again.
+
+## Using StepAIC() aand AIC Values
+
+Now let's try anotherAIC-based stepwise regression function to double-check the previous results.
+
+```{r select, include=TRUE}
+# Doublechecking using the stepAIC function in the MASS library....
+f.step.AIC<-stepAIC(f.lm, direction="both", trace=F)
+
+# Summarise the predictors that are recommended to be dropped
+f.step.AIC$anova
+```
+
+The results above also recommend dropping the following predictors: LowEduc, DiffAdd, Age45_64 and SC1, leaving us with LARent, Unempl, Age18_24 and Age25_44 as the recommended predictors yet again.
+
+<P style="page-break-before: always">
+
+## Using gwpca() and Loading Values
+
+We will firstly use the bw.gwpca() for establish the optimum bandwidth value (k) and then run the gwpca() itself to perform the PCA, after which we will display its results.
+
+```{r gwrpca, include=TRUE}
+bw.choice<-bw.gwpca(Dub.voter,vars=names(Dub.voter)[4:11],k=2)
+pca.gw.auto<-gwpca(Dub.voter,vars=names(Dub.voter)[4:11],bw=bw.choice,k=2,scores=T)
+pca.gw.auto
+```
+
+The results above consider the first two components to be the most important because they collectively explain almost 62% of the global variance in the voter data and about 90% of the local variance (on average). The loadings for the first component put its focus on the young (Age18_24 and Age25_44), mobile (DiffAdd) and less well off (LARent and Unempl) while down-weighting the well off (SC1) and older people (Age45_64).
+
+Age18_24 and Age25_44 are the only predictors with a positive weight for both components so that seems to support its inclusion in the predictor set recommended by our stepwise regression exercises above. Age45_64 is the only predictor that has negative weightings for both components so that appears to support its elimination by stepwise regression. DiffAdd has sizable positive weightings for both components but the fact that it has the highest correlation (0.70) of any variable (with Age25_44) could explain why it was eliminated when Age24_45 was included. It is unclear what justification has to offer for the selection of the Unempl and LARent apart from the fact that LARent has the second highest positive weighting for the first component and, after DiffAdd has been discounted, Unempl has the third highest.
+
+On balance, we will go with the recommended predictor set of LARent, Unempl, Age18_24 and Age25_44.
+
+# Model Evaluation
+
+As a prelude to performing a proper cross-valisation test of the recommended model (which is outside the scope of this document), we will perform a graphical comparison of its predicted (fitted) values with their actual equivalents (using the same scale) as follows:
+
+```{r model, include=TRUE}
+Dub.voter@data$Fitted<-fitted(f.lm.4)
+p1<-spplot(Dub.voter,"GenEl2004",main="Turnout: Actual Values",
+           at=seq(25,75,5))
+p2<-spplot(Dub.voter,"Fitted",main="Turnout: Fitted Values",
+           at=seq(25,75,5))
+grid.arrange(p1,p2,nrow=1,ncol=2)
+```
+
+The maps above show that our oLS-based linear regression model has not done a particularly good job at predicting, so it certainly cannot be accused of overfitting. Whle it does appear to have done a fair job in some EDs in the north and southwest of the county, the relative lack of blue areas in the fitted map suggests that it has particular difficulty with predicting where very low turnout rates will occur. For instance, it completely missed that dark blue (very low) outlier in an ED just north of the city centre in the actual turnout map. It also missed that yellow (very high) outlier in an ED in the southeast corner of the county, so it seems to have problems at that end too.
+
+Let's now do a very high-level comparison of the numbers undelying both of the graphs above:
+
+```{r model_sum, include=TRUE}
+summary(Dub.voter$GenEl2004)
+summary(Dub.voter$Fitted)
+```
+
+Even though the median and mean values for both the actual and fitted turnout value sets are exactly the same (to all intents and purposes), as expect, the results above confirm that the model is overestimating at the low end and underestimating at the top end.
+
+Here are some approaches that could be taken toward creating an improved model (which are outside the scope of this document):
+
+1. Take another look at the classification of outliers and at what might be done to lessen any influence that they might be having on the model;
+2. Try using Geographically Weighted Regression (the robust version to cope with outliers) instead of Multiple Linear Regression (for both predictor selection and model fitting);
+3. Try a different (e.g. non-linear) predictor selection method like Random Forest;
+4. Try a modelling technique that does not rely on linearity such as K Nearest Neighbours (KNN).
