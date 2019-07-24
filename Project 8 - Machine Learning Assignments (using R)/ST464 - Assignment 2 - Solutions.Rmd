@@ -1,0 +1,582 @@
+---
+title: "ST464 - Assignment 2 - Solutions"
+author: "Sean O'Riogain (18145426)"
+date: "9 March 2019"
+output: html_document
+---
+
+```{r setup, include=TRUE}
+knitr::opts_chunk$set(echo = TRUE)
+getwd()
+suppressPackageStartupMessages(library(tidyverse))
+```
+
+## Question 1
+
+For the data matrix below
+
+$$\mathbf{X} = \left[\begin{array}
+{rrr}
+4 & 2 \\
+1 & 0 \\
+-1 & -1 \\
+-3 & 5 \\
+1 & -1
+\end{array}\right]
+$$
+
+```{r q1_data, include=TRUE}
+x<-c(4,1,-1,-3,1,2,0,-1,5,-1)
+X<-matrix(x,nrow=5)
+X
+```
+
+For a) to c) do all the calculations by hand and check your answers in R.
+
+a) Calculate the sample variance-covariance matrix.
+
+```{r q1a, include=TRUE}
+S<-cov(X)
+S
+```
+
+b) Calculate the correlation matrix.
+
+```{r q1b, include=TRUE}
+R<-cor(X)
+R
+```
+
+c) Standardize the variables to have mean 0 and standard deviation 1.
+
+```{r q1c, include=TRUE}
+X_std<-scale(X)
+X_std
+round(mean(X_std))
+round(sd(X_std))
+```
+
+d) In R find the eigenvectors of the correlation matrix of x.
+
+```{r q1d, include=TRUE}
+eigen<-eigen(R)
+eigen$vectors
+```
+
+e) Using prcomp() function, find the loadings for the principal components of x.
+
+```{r q1e, include=TRUE}
+p<-prcomp(X)
+p$rotation
+```
+
+\newpage
+<P style="page-break-before: always">
+
+## Question 2
+
+Body fat data. The data consists of observations taken on a sample of 88 males. In this question you will look at PCA of the variables variables were measured:
+
+Neck circumference (cm) Abdomen circumference (cm)
+Knee circumference (cm) Ankle circumference (cm)
+
+```{r q2_data, include=TRUE}
+bfat <- read.table("data/bodyfat.txt", header=T)
+bfat <- bfat[,c("neck","abdomen", "knee", "ankle")]
+str(bfat)
+```
+
+a) Use pairs to construct a scatterplot matrix.
+
+```{r q2a, include=TRUE}
+pairs(bfat)
+```
+
+**The scatter plot matrix above indicates the existance of linear-type relationships for all of the variable pairings.**
+
+Are there any outliers?
+
+**Yes, there are two particularly obvious outliers in the ankle variable.**
+
+If so, which cases are they?
+
+**Let's do some boxplotting and analyse the output to answer this question accurately.**
+
+```{r q2a_out, include=TRUE}
+boxplot(bfat)                      # Display a boxplot for the dataset
+
+# Construct an outliers data frame containing variable name, value and observation number.
+
+outliers<-function(data){
+  box<-boxplot(data)               # Boxplot the data and store its results
+  
+  var<-rep("",length(box$out))     # Name of variable containing the outlier
+  val<-box$out                     # Outlier value
+  obs<-rep(0,length(box$out))      # Observation (row/case) number
+  
+  for(i in c(1:length(box$out))){  # Parse the outlier details provided by boxplot
+    var[i]<-box$names[box$group[i]]
+    obs[i]<-which(data[,box$group[i]] == box$out[i])
+  }
+  
+  out<-data.frame(var, val, obs)   # Create the data frame  
+  out<-arrange(out, var)           # Sort the data frame by variable name
+  return(out)                      # Return the contents of the data frame
+}
+
+outliers(bfat)                     # Display the outlier details.
+```
+
+**Note how box plotting has identified 3 more outliers in the other variables too.**
+
+(b) Carry out a principal components analysis of the data.
+
+```{r q2b_prcomp, include=TRUE}
+p<-prcomp(bfat, scale=T)
+psum<-summary(p)
+psum
+```
+
+**Note that, even though the measurement units are the same for all variables (cms), I have elected to standardise (scale) them during prcomp because of the relative magnitude difference between the abdominal measurements and the other measurement types.**
+
+What percentage of the variability in the dataset is accounted for by the first component?
+
+```{r q2b_prop1, include=TRUE}
+round(psum$importance[3,1]*100,1)
+```
+
+What percentage of the variability in the dataset is accounted for by the first two components?
+
+```{r q2b_cumprop2, include=TRUE}
+round(psum$importance[3,2]*100,1)
+```
+
+Examine the scree diagram and comment. (You will find the code for the screeplot in h1code.R).
+
+```{r q2b_scree, include=TRUE}
+scree<-function(p){
+  if(class(p)=="princomp"){
+    var<-summary(p)$sdev^2
+    var_prop<-var/sum(var)
+  } else {
+    var_prop<-summary(p)$importance[2,]
+  }
+  
+  len<-length(var_prop)
+  plot(var_prop, type="b", pch=16,
+       xlim=c(1,len),
+       xlab="Principal Component Number",
+       ylab="Variance Proportion", main="Scree Plot",
+       xaxt="n")
+  axis(1,at=c(1:len))
+}
+
+scree(p)
+```
+
+**The scree plot above also clearly shows that over 66% of the variance in the data is explained by PC1, while just over 85% is explained by PC1 and PC2 combined.**
+
+Make a biplot to assist your interpretations.
+
+```{r q2c_biplot, include=TRUE}
+biplot(p, scale=0, cex=c(.5,.5), cex.axis=.5)
+```
+
+**The biplot above indicates, through the proximity of the red vectors, that there is a high degree of colinearity between 3 of the 4 measurement types - i.e. between the abdomen, knee and neck.**
+
+(c) What does the first component measure?
+
+```{r q2c_pc1, include=TRUE}
+p$rotation[, 1]
+```
+
+**PC1 appears to measure the overall 'size' of the sampled males, giving (almost) equal weigthing to the knee, abdomen and neck measurements - and slighlty less to the ankle measurement - thereby, slightly downplaying the influence of the smallest measurement type (ankle), the one with the lower colinearity.**
+
+the second component?
+
+```{r q2c_pc2, include=TRUE}
+p$rotation[, 2]
+```
+
+**PC2 appears to be focusing on the first three measurment types only, while seeking to downplay/eliminate/ignore the ankle measurement using a negative loading. Of the first three measurement types, the most emphasis appears to be placed on the larger measurment types with particular focus on the abdominal measurement and, to a lesser extent, on the neck measurement. Therefore, PC2 looks like it could be useful as an (surrogate) indicator of weight or BMI (body mass index). **
+
+Are there any outliers?
+
+**Of the 5 outlier observations previously identified using boxplotting (i.e. 31, 34, 40, 43 and 84), 3 of them (i.e. 31, 40 and 84) are also immediately apparent in the biplot above. Interestingly, the biplot also appears to identify that case 35 as an outlier, which boxplotting did not.**
+
+What can you say about the outliers from the plot?
+
+**As can be seen from the previous boxplot above, those 3 outliers are the most extreme of the 5 identified there, with the 2 most extreme being ankle measurements and the third being an abdominal measurement. The other 2 of the 5 (for knee and neck, respectively) are shown to be marginal ones by that boxplot. Therefore, the most prominent outliers are still being identified by the biplot of the PC1 & PC2 data. As boxplot implements the formal definition of an outlier (1.5 x IQR), I will discount case 35 on the biplot as a real outlier.**
+
+(d) Omiting any outliers identified, repeat parts (b) and (c).
+
+**Eliminating the 3 observations (i.e. 31, 40 and 84) containing the most prominent outliers...**
+
+```{r q2d_data, include=TRUE}
+bfat2<-bfat[c(-31,-40,-84),]    # Eliminate the observations with outliers
+```
+
+**Boxplotting the reduced dataset and analysing its details...**
+
+```{r q2d_box, include=TRUE}
+boxplot(bfat2)                  # Display a boxplot of the new dataset
+outliers(bfat2)                 # Display the remaining (marginal) outlier details.
+```
+
+**Note that only the 2 marginal outliers remain above.**
+
+Carry out a principal components analysis of the data.
+
+```{r q2d_prcomp, include=TRUE}
+p2<-prcomp(bfat2, scale=T)
+psum2<-summary(p2)
+```
+What percentage of the variability in the dataset is accounted for by the first component?
+
+```{r q2d_prop1, include=TRUE}
+round(psum2$importance[3,1]*100,1)
+```
+
+**Removing the 3 outlier cases has caused this percentage to be increased from 66.3 to 73.1.**
+
+What percentage of the variability in the dataset is accounted for by the first two components?
+
+```{r q2d_cumprop2, include=TRUE}
+round(psum2$importance[3,2]*100,1)
+```
+
+**This percentage has increased from 85.3 to 87.3.**
+
+Examine the scree diagram and comment.
+
+```{r q2d_scree, include=TRUE}
+scree(p2)
+```
+
+**Comparing the above scree plot with the previous one shows that PC1 now explains a higher proportion of the overall variance compared to PC2. In fact, by comparing the percentage variances figures underlying those 2 scree plots, we can see that PC1 gained about 7% while the PC1-PC2 combined percentage increased by 2%. This means that PC1 acquired 5% of its additional variance explanation from PC2.**
+
+Make a biplot to assist your interpretations.
+
+```{r q2d_biplot, include=TRUE}
+biplot(p2, scale=0, cex=c(.5,.5), cex.axis=.5)
+```
+
+**The biplot above indicates, through the proximity of the red vectors, that there is still a reasonable level of collinearity between the abdominal and neck measurements, with decreasing levels between those for neck and knee, and between those for knee and ankle.**
+
+(c) What does the first component measure?
+
+```{r q2d_pc1, include=TRUE}
+p2$rotation[, 1]
+```
+
+**PC1 still appears to measure the overall 'size' of the sampled males, now giving (roughly) equal loadings to neck and abdomen measurements, with those for knee and ankle only slightly above and below them, respectively.**
+
+the second component?
+
+```{r q2d_pc2, include=TRUE}
+p2$rotation[, 2]
+```
+
+**PC2 now appears to be even more focused on the measurements that would be indication of weight/BMI by now discounting knee measurement as well as ankle measurement using negative loadings.**
+
+Are there any outliers?
+
+**There are now no obvious outliers, although the biplot still appears to identify that case 35 (and 74, perhaps) as a possible outlier, which boxplotting did not.**
+
+What can you say about the outliers from the plot?
+
+**As those possible outliers were not identified by boxplotting, they can be discounted.**
+
+## Question 3
+
+A 1902 study obtained measurements on seven physical characteristics for each of 3000 criminals. The seven variables measured were (1) head length (2) head breadth (3) face breadth (4) left finger length (5) left forearm length (6) left foot length (7) height.
+$$\mathbf{R} = \left[\begin{array}
+{rrr}
+1.000 \\
+0.402 & 1.000 \\
+0.396 & 0.618 & 1.000 \\
+0.301 & 0.150 & 0.321 & 1.000 \\
+0.305 & 0.135 & 0.289 & 0.846 & 1.000 \\
+0.339 & 0.206 & 0.363 & 0.759 & 0.797 & 1.000 \\
+0.340 & 0.183 & 0.345 & 0.661 & 0.800 & 0.736 & 1.000
+\end{array}\right]
+$$
+# read in the correlation data as a vector
+```{r q3_data, include=TRUE}
+crimcorr <- matrix(c(
+1.000, 0.402, 0.396, 0.301, 0.305, 0.339, 0.340,
+0.402, 1.000, 0.618, 0.150, 0.135, 0.206, 0.183,
+0.396, 0.618, 1.000, 0.321, 0.289, 0.363, 0.345,
+0.301, 0.150, 0.321, 1.000, 0.846, 0.759, 0.661,
+0.305, 0.135, 0.289, 0.846, 1.000, 0.797, 0.800,
+0.339, 0.206, 0.363, 0.759, 0.797, 1.000, 0.736,
+0.340, 0.183, 0.345, 0.661, 0.800, 0.736, 1.000), nrow = 7, byrow = TRUE)
+colnames(crimcorr)<- c("Head-L","Head-B","Face-B","L-Fing","L-Fore","L-Foot",
+                       "Height")
+```
+
+Using the correlation matrix given above,find the principal components of the data
+
+**Firstly, we will perform PCA the hard using the eigen vectors (loadings) & values (variations)**
+
+```{r q3_prcomp1, include=TRUE}
+e<-eigen(crimcorr)              # Get eigen values and vectors (Primary Components)
+
+e_sdev<-sqrt(e$values)          # Calculate the standard deviations for the PCs
+names(e_sdev)<-paste("PC", as.character(c(1:nrow(e$vectors))), sep="")
+"Standard Deviations:"
+e_sdev
+
+# Name the Primary Components and their Loadings
+colnames(e$vectors)<-paste("PC", as.character(c(1:nrow(e$vectors))), sep="")
+rownames(e$vectors)<-colnames(crimcorr)
+"Loadings:"
+e$vectors
+
+e_varp<-e$values/sum(e$values)  # Calculate the variation proportions
+names(e_varp)<-paste("PC", as.character(c(1:nrow(e$vectors))), sep="")
+"Variation Percentages:"
+e_varp
+
+e_varc<-cumsum(e_varp)          # Calculate the cumulative variation proportions
+names(e_varc)<-paste("PC", as.character(c(1:nrow(e$vectors))), sep="")
+"Cumulative Variation Percentages:"
+e_varc
+```
+
+**Secondly, we will perform PCA the easy way using the princomp function**
+
+```{r q3_prcomp2, include=TRUE}
+p<-princomp(covmat=crimcorr)
+p$sdev
+p$loadings
+psum<-summary(p)
+psum
+```
+
+and interpret the results.
+
+**From the results above, we can see that PC1 explains about 54% of the variability in the correlation matrix, while PC1 & PC2 explain almost 76% between them, and PC1 , PC2 & PC3 together explain 85% of the variability.**
+
+```{r q3_rot, include=TRUE}
+p$loadings
+```
+
+**The loadings for PC1 above gives focuses on the final 4 (non-head) measurements, while PC2 places emphasis on the head measurements and downplays the other measurements (using negative loadings). PC3 completely elimates the non-head measurements (using zero loadings), while placing particular emphasis on the head length measurement (using a relatively large positive loading).**
+
+What percentage of the variability in the dataset is accounted for by the first component?
+```{r q3_PC1, include=TRUE}
+round(e_varc[1]*100, 1)
+```
+
+What percentage of the variability in the dataset is accounted for by the first two components?
+```{r q3_PC2, include=TRUE}
+round(e_varc[2]*100, 1)
+```
+
+Examine the scree diagram and comment.
+```{r q3_scree, include=TRUE}
+scree(p)
+```
+
+**The scree plot confirms the answers to the previous parts of this question - i.e. that PC1 explains just over 54% of the variance in the dataset's correlation matrix and PC1 and PC2 combined explain almost 76% (54+22) of the variance in it. PC1, PC2 & PC3 combined explain about 85% (54+22+9) of the variance, while adding PC4 brings the total explanation up to 90% (54+2+9+5).**
+
+## Question 4
+
+For each of the following situations, answer, if possible:
+
+i) Is it a classification or regression problem? 
+
+ii) Are we most intererested in inference or prediction?
+
+iii) Provide n and p. For each predictor described state whether it is categorical or quantitative.
+
+iv) Indicate whether we would expect the performance of a flexible learning method to be better or worse than an inflexible method.
+
+a) We have a set of data on 500 worldwide tech firms. For each firm, information on
+profit, CEO salary, number of employees, average employee salary, and home country
+is recorded. We are interested in the relationship between CEO salary and other
+measurements.
+<b>
+    i) This is a regression problem.
+    
+    ii) We are more interested in inference.
+    
+    iii) n=500; p=4 (which does not include the response variable of the CEO salary). The first 4 features are quantitative while the 5th is categorical.
+    
+    iv) An inflexible method is more likely to be more suitable here.
+
+</b>
+
+b) A company wishes to launch a new product. They want to know in advance whether
+it will be a success or failure. They collect data on 20 similar products, and record whether they succeeded or not, price charged, marketing budget, and 10 other variables.
+<b>
+    i) This is a regression problem.
+    
+    ii) We are more interested in prediction (of success or failure).
+    
+    iii) n=20; p=12 (which does not include the response variable of the success-failure indicator). The first 2 features are quantative and the other 10 could be of either or both types.
+    
+    iv) A flexible method is more likely to give better results here (provided that care is taken to avoid overfitting).
+
+</b>
+
+c) A dataset was collected to relate the birthweight of babies to the days of gestation and gender.
+<b>
+    i) This is a regression problem.
+    
+    ii) It is not clear as to whether this is an inference or prediction problem. If the ojective of the exercise is to be able to predict the birthweight response based on the other two features (predictors), it is a prediction problem. On the other hand, if the objective is to understand how changes in the values of those predictors influence the value of the response, the problem is one of inference.
+    
+    iii) n is not specified. p=2 (which does not include the birthweight response variable). The first feature is quantative and the second one is categorical.
+    
+    iv) If this is an inference problem, an inflexible (parametric) method would be better. Otherwise, a flexible method could be used instead (or as well). However, with only 2 predictors (of which one of them is categorical and binary) the level of flexibility of the method is probably not of major concern here.
+    
+</b>
+
+d) Observations were collected on 56 attributes from 32 lung cancer patients belonging to one of 3 classes.
+<b>
+    i) It is not clear as to whether this is a classification problem or a regression problem. If the classification of the patients is known and recorded it is a predictiregression problem. Otherwise, it is a classification problem.
+    
+    ii) We are more interested in prediction (most likely).
+    
+    iii) n=32, p=56 (which does not include the class response if it is recorded). The types of the 56 features is not given; they could be either all categorical (probably unlikely), all quantative or some combination of both types.
+    
+    iv) A flexible method is more likely to give better results here (provided that care is taken to avoid overfitting).
+    
+</b>
+
+\newpage
+<P style="page-break-before: always">
+
+## Question 5
+
+In this exercise you will conduct an experiment to compare the fits on a linear and 
+exible model fit. You will use the Auto data from the package ISLR and explore the relationship between the response mpg with weight and horsepower.
+
+a) 
+
+```{r q5a_data, include=TRUE}
+# install.packages("ISLR") #home computer, first time only
+library(ISLR)
+Auto <-Auto[complete.cases(Auto[,c(1,4,5)]),] # to remove NAs
+```
+
+Plot the response (miles per gallon) vs weight and horsepower.
+
+```{r q5a_plot, include=TRUE}
+pairs(Auto[c(1,5,4)])
+```
+
+What do they tell you about the relationship between mpg and the predictors?
+
+**There is (roughly) negative linear (although some curvature is evident at the higher values of mpg) between the mpg response variable and both of those predictors - i.e. as the predictor values increase, the value of the response decreases.**
+
+b) Make a 3d plot of weight, horsepower and mpg (see commands below).
+
+```{r q5b_plot, include=TRUE}
+# install.packages("plot3D") #home computer, first time only nstall package
+library(plot3D)
+scatter3D(Auto$weight,Auto$horsepower,Auto$mpg)
+library(plot3Drgl)
+scatter3Drgl(Auto$weight,Auto$horsepower,Auto$mpg)
+```
+
+What do they tell you about the relationship between mpg and the predictors?
+
+**As to be expected, there is a negative relationship between mpg (response) and both weight and horsdepower (predictors) - i.e. mpg decreases when either or both of those 2 predictors increase. As observed previously, those relationships are not perfectly linear as the plots show curvature in the data.**
+
+c) Next, divide the data into a training set and a test set as follows:
+
+```{r q5c_train, include=TRUE}
+set.seed(123)
+train <- sample(nrow(Auto), round(.8*nrow(Auto)))
+AutoTrain <- Auto[train,]
+AutoTest <- Auto[-train,]
+```
+
+Fit a linear regression model to mpg versus weight and horsepower on AutoTrain. Call
+the fit f1.
+
+```{r q5c_lm, include=TRUE}
+f1<-lm(mpg ~ weight + horsepower, data=AutoTrain)
+summary(f1)
+```
+
+Examine summary(f1) and comment on the significance of the predictors.
+
+**In the Estimate column, the Intercept value tells us that the plot hits the Z-plane when the mpg value is 46.16 (its maximum value) and, as noted previously in relation to the 3D plots, the slope of its relationship between both horsepower and weight are both negative.**
+
+**In the Pr(>|t|) column, all scores are tiny which tells us that all 3 coefficients are highly significant. In particular, for the 2 predictors (horsepower and mpg), this means that we can reject the null Hypothesis ($H_0$) - i.e. that their slope is zero - and, therefore, that their is a strong indication of linearity in their relationships with the response variable (mpg).**
+
+d) Plot the fitted surface and the data. (See lecture notes for code).
+
+```{r q5d_plot, include=TRUE}
+wt <- seq(min(AutoTrain$weight), max(AutoTrain$weight), length.out = 100)
+hp <- seq(min(AutoTrain$horsepower), max(AutoTrain$horsepower), length.out = 100)
+pred <- predict(f1, expand.grid(weight=wt, horsepower=hp))
+pred <- matrix(pred,100,100)
+scatter3D(AutoTrain$weight, AutoTrain$horsepower, AutoTrain$mpg, pch = 18,
+          surf = list(x = wt, y = hp, z = pred))
+scatter3Drgl(AutoTrain$weight, AutoTrain$horsepower, AutoTrain$mpg, pch = 18)
+rgl.surface(wt, hp, pred,  coords=c(1,3,2), alpha.col=0.2)
+```
+
+Does the linear surface look like a good fit?
+
+**It is not easy to judge the goodness of fit from the static scatter3D plot above but it doesn't look particularly good. However, the rotatable scatter3Drgl plot clearly shows that the fit is poor.**
+
+e) Use loess to fit a surface to the same data. Call the fit f2. Plot the fitted surface and the data.
+
+```{r q5e_loess, include=TRUE}
+f2 <- loess(mpg ~ weight + horsepower, data=AutoTrain)
+wt <- seq(min(AutoTrain$weight), max(AutoTrain$weight), length.out = 100)
+hp <- seq(min(AutoTrain$horsepower), max(AutoTrain$horsepower), length.out = 100)
+pred <- predict(f2, expand.grid(weight=wt, horsepower=hp))
+pred <- matrix(pred,100,100)
+scatter3D(AutoTrain$weight, AutoTrain$horsepower, AutoTrain$mpg, pch = 18,
+          surf = list(x = wt, y = hp, z = pred))
+scatter3Drgl(AutoTrain$weight, AutoTrain$horsepower, AutoTrain$mpg, pch = 18)
+rgl.surface(wt, hp, pred,  coords=c(1,3,2), alpha.col=0.2)
+```
+
+Does the loess surface look like a good fit?
+
+**Again, it is not easy to judge the goodness of fit from the static scatter3D plot above but it does appear to be better than that of the linear fit used previously. However, the rotatable scatter3Drgl plot clearly shows that fit is much better than the previous than the linear one.**
+
+f) Calculate the MSE for both fits on the training data. (See lecture notes for code.)
+
+```{r q5f_mse, include=TRUE}
+mean((f1$residuals)^2)
+
+mse_f1<-mean((f1$fitted.values - AutoTrain$mpg)^2)
+mse_f1
+
+mean((f2$residuals)^2)
+
+mse_f2<-mean((f2$fitted - AutoTrain$mpg)^2)
+mse_f2
+```
+
+What do these tell you?
+
+**The loess fit is confirmed as a better one because of the lower value of its MSE compared to the linear equivalent.**
+
+g) Calculate the MSE for both fits on the test data.
+
+```{r q5g_mse, include=TRUE}
+AutoTestHat1<-predict(f1, AutoTest)
+
+mse_f1<-mean((AutoTestHat1 - AutoTest$mpg)^2)
+mse_f1
+
+AutoTestHat2<-predict(f2, AutoTest)
+
+mse_f2<-mean((AutoTestHat2 - AutoTest$mpg)^2)
+mse_f2
+```
+
+What do these numbers tell you?
+
+**This time, the linear fit achieved a lower MSE value than the loess equivalent. This may be an indication that the loess fit is overfitted. This calls into question the previously declared preference for the loess fit and it means that further evaluation of those 2 fits is required using additonal test datasets, assuming that they can be acquired.**
+
+**Interestingly, the MSE values achieved for the test dataset are lower than those observed for the training set when higher values would have been expected - which is a further indication of possible overfitting in the case of the loess fit.**

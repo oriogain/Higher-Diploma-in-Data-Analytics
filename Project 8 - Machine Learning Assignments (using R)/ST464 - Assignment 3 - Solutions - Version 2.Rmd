@@ -1,0 +1,716 @@
+---
+title: "ST464 - Assignment 3 - Solutions - Version 2"
+author: "Sean O'Riogain (18145426)"
+date: "29 March 2019"
+output: html_document
+---
+
+```{r setup, include=TRUE}
+getwd()
+suppressPackageStartupMessages(library(tidyverse))    # Needed for deplyr funcs.
+suppressPackageStartupMessages(library(MASS))         # Needed for lda, qda &
+                                                      #   stepAIC and Pima data
+suppressPackageStartupMessages(library(ISLR))         # Needed for Auto data
+suppressPackageStartupMessages(library(class))        # Needed for knn()
+suppressPackageStartupMessages(library(leaps))        # Needed for regsubsets()
+```
+
+## Question 1
+
+The Titanic dataset records for each person on the ship the passenger class, age (child or adult), and sex, and whether they survived or not.
+
+In this assignment you will use logistic regression on a training set (ttrain) to develop a classification rule, and then this rule will be applied to the test set (ttest).
+
+```{r q1_data, include=TRUE}
+ttrain <- read.csv("ttrain.csv", header=T, row.names=1)
+ttest <- read.csv("ttest.csv", header=T, row.names=1)
+```
+
+a) Use logistic regression to build a model relating Survived to Class Age and Sex for the training data ttrain.
+
+```{r q1_a, include=TRUE}
+str(ttrain)
+
+f<-glm(Survived ~ Class + Age + Sex, data=ttrain, family="binomial")
+summary(f)
+```
+
+b) From the fitted model, calculate a vector prob of survival probabilities and a vector pred of predicted classes, for the training data.
+
+```{r q1_b1, include=TRUE}
+prob<-predict(f, type="response")               # Probabilities vector
+head(prob)
+
+pred<-factor(ifelse(prob < 0.5, "No", "Yes"))   # Predicted classes vector
+head(pred)
+
+confmat<-table(ttrain$Survived, pred)           # Construct the confusion matrix
+confmat
+```
+
+What proportion of survivors are missclassified?
+
+```{r q1_b2, include=TRUE}
+paste(round(confmat["Yes","No"]/rowSums(confmat)["Yes"]*100, 2),"%",sep="")
+```
+
+What proportion of those who died are missclassified?
+
+```{r q1_b3, include=TRUE}
+paste(round(confmat["No","Yes"]/rowSums(confmat)["No"]*100, 2),"%",sep="")
+```
+
+What proportion of the predicted survivors actually survived? 
+
+```{r q1_b4, include=TRUE}
+paste(round(confmat["Yes","Yes"]/colSums(confmat)["Yes"]*100, 2),"%",sep="")
+```
+
+What is the overall error rate for the training data?
+
+```{r q1_b5, include=TRUE}
+paste(round((confmat["No","Yes"]+confmat["Yes","No"])/sum(confmat)*100, 2),"%",sep="")
+```
+
+c) From the fitted model, calculate a vector prob of survival probabilities and a vector pred of predicted classes, for the test data.
+
+```{r q1_c1, include=TRUE}
+str(ttest)
+
+prob<-predict(f, ttest, type="response")            # Probabilities vector
+head(prob)
+
+pred<-factor(ifelse(prob < 0.5, "No", "Yes"))       # Predicted classes vector         
+head(pred)
+
+confmat<-table(ttest$Survived, pred)                # Construct the confusion matrix
+confmat
+```
+
+What proportion of survivors are misclassified?
+
+```{r q1_c2, include=TRUE}
+paste(round((confmat["Yes","No"]/rowSums(confmat)["Yes"])*100,2),"%",sep="")
+```
+
+What proportion of those who died are misclassified?
+
+```{r q1_c3, include=TRUE}
+paste(round((confmat["No","Yes"]/rowSums(confmat)["No"])*100,2),"%",sep="")
+```
+
+What proportion of the predicted survivors actually survived?
+
+```{r q1_c4, include=TRUE}
+paste(round(((confmat["Yes","Yes"])/colSums(confmat)["Yes"])*100,2),"%",sep="")
+```
+
+What is the overall error rate for the test data?
+
+```{r q1_c5, include=TRUE}
+paste(round(((confmat["No","Yes"]+confmat["Yes","No"])/sum(confmat))*100,2),"%",sep="")
+```
+
+\newpage
+<P style="page-break-before: always">
+
+# *** Not for Marking ***
+
+## Question 2
+
+Suppose we wish to predict whether a given stock will issue a dividend this year (yes or no) based on X, last year's percentage profit.
+
+We examine a large number of companies and discover that the mean value of X for companies that issued a dividend was 10, while the mean for those that didn't was 0.
+
+<b>
+$$\mu_{Y=Yes}=10$$
+$$\mu_{Y=No}=0$$
+</b>
+
+In addition, the variance of X for these two sets of companies was 36.
+
+<b>
+$$\sigma^2=36$$
+$$\sigma=6$$
+</b>
+
+Finally, 80% of companies issued dividends.
+
+<b>
+$$P(Y=1)=0.8$$
+$$P(Y=0)=0.2$$
+</b>
+
+Assuming that X follows a normal distribution, predict the probability that a company will issue a dividend this year given that its percentage profit was X = 4 last year.
+
+<b>
+$$P(Y=1|X=4)$$
+</b>
+
+```{r q2_1, include=TRUE}
+# Let's simulate some data based on the information provided above
+
+# Simulating data for 8000 companies (80%) for which a dividend is issued...
+set.seed(123)
+x<-round(rnorm(8000,mean=10,sd=6),2)
+y<-rep(1,length(x))
+data_yes<-data.frame(pct=x, div=y)
+
+# Simulating data for 2000 companies (20%) for which a dividend is not issued...
+x<-round(rnorm(2000,mean=0,sd=6),2)
+y<-rep(0,length(x))
+data_no<-data.frame(pct=x, div=y)
+
+# Combining both of those simulated datasets.....
+data<-rbind(data_yes, data_no)
+str(data)
+head(data)
+
+# Fitting a model to the combined dataset.....
+f<-glm(div ~ pct, data=data, family="binomial")
+summary(f)
+
+# Predicting if dividend will be issued where a company has a 4% profit margin
+prob<-round(predict(f, data.frame(pct=4), type="response"), 2)
+paste("Predicted Probability =",prob)
+```
+
+\newpage
+<P style="page-break-before: always">
+
+## Question 3
+
+In the Auto data, create a new variable that contains the value 1 for cars with above the median mpg, and 0 for other cars. Name this variable mpg01. Split the data into a test and training sets of size containing 50% and 50% of observations each.
+
+```{r q3_data, include=TRUE}
+m <- median(Auto$mpg)
+Auto$mpg01 <- factor(ifelse(Auto$mpg < m, 0, 1))
+set.seed(1)
+s <- sample(nrow(Auto), round(.5*nrow(Auto)))
+Atrain <- Auto[s,]
+Atest <- Auto[-s,]
+str(Atrain)
+str(Atest)
+```
+
+a) Plot the variables weight and acceleration using colour to show the two levels of mpg01 for the training set.
+
+```{r q3_a, include=TRUE}
+ggplot(data=Atrain, aes(x=weight, y=acceleration, colour=mpg01)) +
+  geom_point(stat="identity")
+```
+
+**This plot indicates that there is a (negative) linear relationship between weight and acceleration.**
+
+b) Perform a linear discriminant analysis to predict mpg01, using variables weight and acceleration, on the training set.
+
+```{r q3_b_lda, include=TRUE}
+f<-lda(mpg01 ~ weight + acceleration, data=Atrain)       # Fit the model
+f
+
+pred<-predict(f)$class                        # Get predicted classes
+confmat<-table(Atrain$mpg01, pred)            # Construct the confusion matrix
+confmat
+
+# Calculate the overall training error rate
+paste(round((confmat["0","1"]+confmat["1","0"])/sum(confmat)*100, 2),"%",sep="")
+```
+
+Use a plot to show the discriminant boundaries.
+
+```{r q3_b_plot, include=TRUE}
+# Create a grid representing a range of values for both predictors
+grid<-expand.grid(weight=seq(min(Atrain$weight), max(Atrain$weight), length=100),
+                  acceleration=seq(min(Atrain$acceleration),
+                                   max(Atrain$acceleration),
+                                   length=100))
+
+# Use the model to get class predictions for the grid (for 100x100 weight-acceleration value combinations) and append results as new column in grid df
+grid$pred<-predict(f, grid)$class
+
+str(grid)          # Check the grid data frame
+
+# Draw t1he required plot using the data in the grid data frame
+ggplot(data=grid, aes(x=weight, y=acceleration, colour=pred)) +
+  geom_point(size=0.5)
+```
+
+What is the test error of the model obtained?
+
+```{r q3_b_err, include=TRUE}
+pred<-predict(f, Atest)$class                # Get predicted classes for test
+confmat<-table(Atest$mpg01, pred)            # Construct the confusion matrix
+confmat
+
+paste(round((confmat["0","1"]+confmat["1","0"])/sum(confmat)*100, 2),"%",sep="")
+```
+
+c) Repeat (b) using quadratic discriminant analysis.
+
+```{r q3_c_qda, include=TRUE}
+f<-qda(mpg01 ~ weight + acceleration, data=Atrain)       # Fit the model
+f
+
+pred<-predict(f)$class                        # Get predicted classes
+confmat<-table(Atrain$mpg01, pred)            # Construct the confusion matrix
+confmat
+
+# Calculate the overall training error rate
+paste(round((confmat["0","1"]+confmat["1","0"])/sum(confmat)*100, 2),"%",sep="")
+```
+
+Use a plot to show the discriminant boundaries.
+
+```{r q3_c_plot, include=TRUE}
+# Create a grid representing a range of values for both predictors
+grid<-expand.grid(weight=seq(min(Atrain$weight), max(Atrain$weight), length=100),
+                  acceleration=seq(min(Atrain$acceleration),
+                                   max(Atrain$acceleration),
+                                   length=100))
+
+# Use the model to get class predictions for the grid (for 100x100 weight-acceleration value combinations) and append results as new column in grid df
+grid$pred<-predict(f, grid)$class
+
+str(grid)          # Check the grid data frame
+
+# Draw t1he required plot using the data in the grid data frame
+ggplot(data=grid, aes(x=weight, y=acceleration, colour=pred)) +
+  geom_point(size=0.5)
+```
+
+What is the test error of the model obtained?
+
+```{r q3_c_err, include=TRUE}
+pred<-predict(f, Atest)$class                # Get predicted classes for test
+confmat<-table(Atest$mpg01, pred)            # Construct the confusion matrix
+confmat
+
+paste(round((confmat["0","1"]+confmat["1","0"])/sum(confmat)*100, 2),"%",sep="")
+```
+
+Which is better, LDA or QDA?
+
+**In this case, QDA performed better than LDA because it achieved the lower error rate on the test set (and on the training set too).**
+
+**Coincidentally, QDA achieved the same error rate on the test set as LDA achieved on the training set.**
+
+d) Perform a linear discriminant analysis to predict mpg01, using variables displacement, horsepower, weight and acceleration on the training set.
+
+```{r q3_d_lda, include=TRUE}
+f<-lda(mpg01 ~ displacement + horsepower + weight + acceleration, data=Atrain)
+f                                          # The fitted model
+
+pred<-predict(f)$class                     # Get the predicted classes
+confmat<-table(Atrain$mpg01, pred)         # Construct the confusion matrix
+confmat
+
+# Calculate the overall training error rate
+paste(round((confmat["0","1"]+confmat["1","0"])/sum(confmat)*100, 2), "%", sep="")
+```
+
+What is the test error of the model obtained?
+
+```{r q3_d_err, include=TRUE}
+pred<-predict(f, Atest)$class             # Get the predicted classes
+confmat<-table(Atest$mpg01, pred)         # Construct the confusion matrix
+confmat
+
+# Calculate the overall test error rate
+paste(round((confmat["0","1"]+confmat["1","0"])/sum(confmat)*100, 2), "%", sep="")
+```
+
+e) Repeat (d) using quadratic discriminant analysis.
+
+```{r q3_e_qda, include=TRUE}
+f<-qda(mpg01 ~ displacement + horsepower + weight + acceleration, data=Atrain)
+f                                          # The fitted model
+
+pred<-predict(f)$class                     # Get the predicted classes
+confmat<-table(Atrain$mpg01, pred)         # Construct the confusion matrix
+confmat
+
+# Calculate the overall training error rate
+paste(round((confmat["0","1"]+confmat["1","0"])/sum(confmat)*100, 2), "%", sep="")
+```
+
+What is the test error of the model obtained?
+
+```{r q3_e_err, include=TRUE}
+pred<-predict(f, Atest)$class             # Get the predicted classes
+confmat<-table(Atest$mpg01, pred)         # Construct the confusion matrix
+confmat
+
+# Calculate the overall test error rate
+paste(round((confmat["0","1"]+confmat["1","0"])/sum(confmat)*100, 2), "%", sep="")
+```
+
+Which is better, LDA or QDA?
+
+**In this case, LDA performed better than QDA because it achieved the lower error rate on the test set.**
+
+**In fact, the test error rate by QDA in this instance is the same as the one it achieved in (d) which had fewer predictors (although the confusion matrix shows that the errors are distributed slightly differently).**
+
+f) Perform KNN with response of mpg01, and the four predictors displacement, horsepower, weight and acceleration.
+
+Remember to scale the predictors. Use k = 5 and k = 30.
+
+```{r q3_f_knn, include=TRUE}
+set.seed(123)    # Setting seed value to ensure that knn gives consistent results
+
+# Scale the predictors for both the training and test sets
+xdata<-scale(Atrain[,3:6])
+means<-attr(xdata,"scaled:center")
+sds<-attr(xdata,"scaled:scale")
+xdataTest<-scale(Atest[,3:6], center=means, scale=sds)
+
+# Create function to perform KNN
+my_knn<-function(train, test, resp, k){
+  pred<-knn(train, test, cl=resp, k=k)
+  confmat<-table(resp, pred)
+  return(confmat)
+}
+
+# Create a function to extract the various error rates from the specified confusion matrix
+my_err<-function(confmat, pos_first=F){
+  err<-(confmat[1,2]+confmat[2,1])/sum(confmat)       # Overall error rate
+  
+  if(pos_first){                                      # 1st row is the positive one
+    tpr<-confmat[1,1]/sum(confmat[1,])                # True positive rate
+    fpr<-confmat[2,1]/sum(confmat[2,])                # False positive rate
+    fnr<-confmat[1,2]/sum(confmat[1,])                # False negative rate
+    tnr<-confmat[2,2]/sum(confmat[2,])                # True negative rate
+  } else{
+    tpr<-confmat[2,2]/sum(confmat[2,])                # True positive rate
+    fpr<-confmat[1,2]/sum(confmat[1,])                # False? positive rate
+    fnr<-confmat[2,1]/sum(confmat[2,])                # False negative rate
+    tnr<-confmat[1,1]/sum(confmat[1,])                # True negative rate
+  }
+  
+  return(data.frame(ERR=err,FPR=fpr,TPR=tpr,FNR=fnr,TNR=tnr))   # Return error rates
+}
+
+# For k = 5
+k<-5
+
+# Perform KNN on the training set
+confmat<-my_knn(xdata, xdata, Atrain$mpg01, k)
+confmat
+
+paste("k = ", k, ": ", "Training Error Rate = ",
+      round(my_err(confmat)["ERR"]*100,2),"%",sep="")
+
+# Perform KNN on the test set
+confmat<-my_knn(xdata, xdataTest, Atrain$mpg01, k)
+confmat
+
+paste("k = ", k, ": ", "Test Error Rate = ",
+      round(my_err(confmat)["ERR"]*100,2),"%",sep="")
+
+# For k = 30
+k<-30
+
+# Perform KNN on the training set
+confmat<-my_knn(xdata, xdata, Atrain$mpg01, k)
+confmat
+
+paste("k = ", k, ": ", "Training Error Rate = ",
+      round(my_err(confmat)["ERR"]*100,2),"%",sep="")
+
+# Perform KNN on the test set
+confmat<-my_knn(xdata, xdataTest, Atrain$mpg01, k)
+confmat
+
+paste("k = ", k, ": ", "Test Error Rate = ",
+      round(my_err(confmat)["ERR"]*100,2),"%",sep="")
+```
+
+Which value of k gives the best result on the test set?
+
+**k=5 gives a better result for the test set because it achieved the lower overall error rate (and for the training set too).**
+
+\newpage
+<P style="page-break-before: always">
+
+# *** Not for Marking ***
+
+## Question 4
+
+4. A classifier gives the following result. In the table below, Group gives the true class, and Prob gives the estimated probability of Group A (positive) using the classifier.
+
+```{r q4_data, include=TRUE}
+Group<-c(rep("A",6), rep("B",4))
+Prob<-c(0.486,0.560,0.701,0.936,0.441,0.593,0.623,0.436,0.415,0.041)
+Group_Other<-c(rep("B",6), rep("A",4))
+data<-data.frame(Group, Prob, Group_Other)
+data
+```
+
+(You can do this question in R or by hand)
+
+a) What are the predicted classes? Use a threshold of 0.5.
+
+```{r q4_a, include=TRUE}
+pred<-data$Group                            # Assume the classifier is perfect
+misses<-which(data$Prob < 0.5)             # Identify the classifier misses
+pred[misses]<-data$Group_Other[misses]      # Select the other group
+pred
+```
+
+b) What is the error rate? 
+
+```{r q4_b_err, include=TRUE}
+confmat<-table(data$Group, pred)                  # Create the confusion matrix
+confmat                                           # Display the confusion matrix
+
+paste("Error Rate = ",round(my_err(confmat,T)["ERR"]*100,2),"%",sep="")
+```
+
+What is the false positive rate?
+
+```{r q4_b_fpr, include=TRUE}
+paste("False Positive Rate = ",round(my_err(confmat,T)["FPR"]*100,2),"%",sep="")
+```
+
+The true positive rate?
+
+```{r q4_b_tpr, include=TRUE}
+paste("True Positive Rate = ",round(my_err(confmat, T)["TPR"]*100,2),"%",sep="")
+```
+
+c) Now let the threshold take values 0, .2, .4,.6,.8,1. For each threshold calculate the false positive rate, and the true positive rate. (If doing this in R use more thresholds.)
+
+```{r q4_c, include=TRUE}
+# Create a function to calculate all error rates for the specified threshold level
+t_err<-function(data, t){
+  pred<-data$Group                            # Assume the classifier is perfect
+  misses<-which(data$Prob < t)                # Identify the classifier misses
+  pred[misses]<-data$Group_Other[misses]      # Select the other group
+  
+  confmat<-table(data$Group, pred)            # Create the confusion matrix
+  return(data.frame(Threshold=t, my_err(confmat, T)))
+}
+
+t<-seq(0, 1, 0.05)                  # Generate a sequence of threshold values
+
+df<-t_err(data, t[1])               # Initialise the error rate details data frame
+
+for(i in 2:length(t)){              # Loop for all threshold values
+    df<-rbind(df,                   # Retrieve and append the other error details
+              t_err(data, t[i]))    
+}
+
+df                                  # Display the error rate details
+```
+
+d) Plot the true positive rate versus the false positive rate. This is the ROC curve.
+
+```{r q4_d, include=TRUE}
+plot(df$FPR, df$TPR, col="black", type="l", ylim=c(0,1),
+     xlab="False positive rate", ylab="True positive rate")
+abline(0,1,col="grey80")
+```
+
+e) (Optional, if doing in R) Another classifier just assigns class probabilities randomly, ie the estimated probabilities are:
+
+```{r q4_e_data, include=TRUE}
+Group<-c(rep("A",6), rep("B",4))
+Prob<-c(0.206,0.177,0.687,0.384,0.770,0.498,0.718,0.992,0.380,0.777)
+Group_Other<-c(rep("B",6), rep("A",4))
+data_e<-data.frame(Group, Prob, Group_Other)
+data_e
+```
+
+Plot the ROC curve for this classifier.
+
+```{r q4_e, include=TRUE}
+t<-seq(0, 1, 0.05)                  # Generate a sequence of threshold values
+
+df<-t_err(data_e, t[1])             # Initialise the error rate details data frame
+
+for(i in 2:length(t)){              # Loop for all other threshold values
+    df<-rbind(df,                   # Retrieve and append the other error details
+              t_err(data_e, t[i]))    
+}
+
+df                                  # Display the error rate details
+
+plot(df$FPR, df$TPR, col="black", type="l", ylim=c(0,1),
+     xlab="False positive rate", ylab="True positive rate")
+abline(0,1,col="grey80")
+```
+
+\newpage
+<P style="page-break-before: always">
+
+## Question 5
+
+Dataset on diabetes in Pima Indian Women in library(MASS). For a description of the data see ?Pima.tr.
+
+```{r q5_data, include=TRUE}
+str(Pima.tr)
+str(Pima.te)
+```
+
+Use any supervised classification technique to predict diabetes from the 7 available features.
+
+Train your algorithms on Pima.tr
+
+**Will use logistic regression to build the prediction model.**
+
+**Using the stepwise logistic regression (step function) to recommend the 'optimal' predictor selection.....**
+
+```{r q5_select, include=TRUE}
+# Fit a model with all (7) predictors
+f <- glm(type ~ ., family = binomial, data = Pima.tr)
+summary(f)
+
+# Perform stepwise model fitting (direction=backward by default)
+steps<-step(f, trace=F)
+
+# Summarise the predictors that are recommended to be dropped
+steps$anova
+
+# Doublechecking using the stepAIC function in the MASS library....
+stepAICs<-stepAIC(f, trace=F)
+
+# Summarise the predictors that are recommended to be dropped
+stepAICs$anova
+```
+
+**Both the step and stepAIC functions recommend omission of the skin and bp predictors - which reduces the AIC value from 194.39 to 190.47 (because omitting other predictors failed to reduce the AIC value any further).**
+
+**As it happens, those are also the two variables with the highest p-values in the summary(f) output above.**
+
+```{r q5_train, include=TRUE}
+# Create function to create the confusion matrix for the specified fit
+my_confmat<-function(f, data, resp){
+  prob<-predict(f, data, type="response")             # Get the predicted probs.
+  pred<-factor(ifelse(prob < 0.5, "No", "Yes"))      # Translate probs. to preds.
+  
+  confmat<-table(resp, pred)                          # Create the confusion matrix
+  return(confmat)                                     # Return the confusion matrix
+}
+
+f<-glm(type ~ npreg + glu + bmi + ped + age, family=binomial, data=Pima.tr)
+
+confmat<-my_confmat(f, Pima.tr, Pima.tr$type)
+confmat
+
+paste("Error Rate = ",round(my_err(confmat)["ERR"]*100,2),"%",sep="")
+```
+
+and present the overall error rate for the test data Pima.te.
+
+```{r q5_test, include=TRUE}
+confmat<-my_confmat(f, Pima.te, Pima.te$type)
+confmat
+
+paste("Error Rate = ",round(my_err(confmat)["ERR"]*100,2),"%",sep="")
+```
+
+## Question 6
+
+Generate some fake data using the following code:
+
+```{r q6_data, include=TRUE}
+set.seed(1)
+x <- rnorm(100)
+y <- 1 + .2*x+3*x^2+.6*x^3 + rnorm(100)
+d <- data.frame(x=x,y=y)
+
+str(d)
+```
+
+a) Use best subset selection to choose the best model containing predictors X, $X^2$,. . .$X^{10}$.
+
+```{r q6_a, include=TRUE}
+for(i in 2:10){
+  d<-cbind(d, d$x^i)
+  colnames(d)[i+1]<-paste("x",i,sep="")
+}
+
+str(d)
+
+allfits<-regsubsets(y ~ ., data=d)
+
+allfits_s<-summary(allfits)
+```
+
+Which terms are included in the best 3 variable model?
+
+```{r q6_a1, include=TRUE}
+terms<-attr(which(summary(allfits)$which[3,]),"names")
+terms[2:length(terms)]
+```
+
+b) Make a plot of $C_p$ versus number of predictors for the models in allfits.
+
+```{r q6_b, include=TRUE}
+cp<-allfits_s$cp                 # Extract the Cp values for all stepwise models
+np<-rowSums(allfits_s$which)-1   # Extract the number of predictors for each too
+
+# Draw the required plot
+plot(np, cp, pch=16, xlab="Number of predictors")
+lines(np, cp)
+```
+
+Which model has the lowest $C_p$?
+
+```{r q6_b1, include=TRUE}
+min_cp<-which(cp==min(cp))
+min_cp
+```
+
+What are its predictors?
+
+```{r q6_b2, include=TRUE}
+names(which(allfits_s$which[min_cp,]))[-1]
+```
+
+c) Reconstruct allfits with option method = "forward".
+
+```{r q6_c, include=TRUE}
+allfits<-regsubsets(y ~ ., data=d, method="forward")
+
+allfits_s<-summary(allfits)
+
+cp<-allfits_s$cp                 # Extract the Cp values for all stepwise models
+np<-rowSums(allfits_s$which)-1   # Extract the number of predictors for each too
+```
+
+Which model has the lowest $C_p$?
+
+```{r q6_c1, include=TRUE}
+min_cp<-which(allfits_s$cp==min(cp))
+min_cp
+```
+
+What are its predictors?
+
+```{r q6_c2, include=TRUE}
+names(which(allfits_s$which[min_cp,]))[-1]
+```
+
+d) Reconstruct allfits with option method = "backward". 
+
+```{r q6_d, include=TRUE}
+allfits<-regsubsets(y ~ ., data=d, method="backward")
+
+allfits_s<-summary(allfits)
+
+cp<-allfits_s$cp                 # Extract the Cp values for all stepwise models
+np<-rowSums(allfits_s$which)-1   # Extract the number of predictors for each too
+```
+
+Which model has the lowest $C_p$?
+
+```{r q6_d1, include=TRUE}
+min_cp<-which(allfits_s$cp==min(cp))
+min_cp
+```
+
+What are its predictors?
+
+```{r q6_d2, include=TRUE}
+names(which(allfits_s$which[min_cp,]))[-1]
+```

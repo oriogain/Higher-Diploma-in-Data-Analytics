@@ -1,0 +1,434 @@
+---
+title: "ST464 - Assignment 4 - Solutions"
+author: "Sean O'Riogain (18145426)"
+date: "30 April 2019"
+output: html_document
+---
+
+```{r setup, include=TRUE}
+knitr::opts_chunk$set(echo = TRUE)
+getwd()
+suppressPackageStartupMessages(library(tidyverse))  # Needed for dplyr functions etc.
+suppressPackageStartupMessages(library(MASS))       # Needed for Boston data etc.
+suppressPackageStartupMessages(library(splines))    # Needed for bs() etc.
+suppressPackageStartupMessages(library(gam))        # Needed for gam() etc.
+suppressPackageStartupMessages(library(tree))       # Needed for tree() etc.
+suppressPackageStartupMessages(library(glmnet))     # Needed for glmnet() etc.
+```
+
+## Question 1
+
+For the Boston data available in package MASS we wish to relate dis (weighted mean
+of distances to five Boston employment centres) to nox (nitrogen oxides concentration in parts per 10 million).
+
+```{r q1_data, include=TRUE}
+data("Boston")
+str(Boston)
+```
+
+a) Fit a cubic polynomial to the data.
+
+```{r q1a_fit, include=TRUE}
+f.q1a<-lm(dis ~ nox + I(nox^2) + I(nox^3), data=Boston)
+```
+
+Plot the data and the fit.
+
+```{r q1a_plot, include=TRUE}
+ggplot(data=Boston, aes(x=nox, y=dis)) + geom_point() +
+  geom_line(aes(y=fitted(f.q1a)), color="red")
+```
+
+Comment on the fit.
+
+**The fit appears to be pretty good except for the highest values of dis, where it bypasses those data points.**
+
+Calculate the MSE.
+
+```{r q1a_mse, include=TRUE}
+mse.q1a<-mean(f.q1a$residuals^2)
+mse.q1a
+```
+
+b) Repeat (a), this time using a 10th degree polynomial.
+
+```{r q1b, include=TRUE}
+f.q1b<-lm(dis~nox+I(nox^2)+I(nox^3)+I(nox^4)+I(nox^5)+I(nox^6)+I(nox^7)+
+            I(nox^8)+I(nox^9)+I(nox^10), data=Boston)
+
+ggplot(data=Boston, aes(x=nox, y=dis)) + geom_point() +
+  geom_line(aes(y=fitted(f.q1a)), colour="red") +
+  geom_line(aes(y=fitted(f.q1b)), colour="blue")
+            
+mse.q1b<-mean(f.q1b$residuals^2)
+mse.q1b
+```
+
+Compare the fits and the MSE.
+
+**The new (blue) fit appears to be better than the previous cubic (red) one except for the highest values of dis, where it curves sharply away from those data points. The lower MSE value for the blue fit seems to confirm this.**
+
+Use anova to compare the two fits and comment on your findings.
+
+```{r q1c_anova, include=TRUE}
+anova(f.q1a,f.q1b)
+```
+
+**The results above indicate that the additional terms ($nox^4$ to $nox^{10}$) make a statistically signifcant difference to the model fit and, therefore, should be retained at least (if not added to).**
+
+c) Describe how you might use cross-validation to select the optimal degree (say between 1 and 10).
+
+**It should be possible to create a function to build and fit the required polynomial expression based on a passed parameter which specifies the required order number (integer) and variables. Then invoke it iteratively, passing order values in the required range, to store the resultant MSE value of each fit in an array. The number of the array element with the lowest (minimum) MSE value would then give the optimal order (degree) number. We could then use Anova to compare the fit at that optimal degree with that achieved for one of our earlier attempts at assessing goodness of fit at a lower degree to confirm the goodness of optimal fit statistically.**
+
+d) Carry out the cross-validation procedure.
+
+```{r q1d_cv, include=TRUE}
+# This function builds the regression formula for the required polynomial expression.
+cv.formula<-function(x, y, o=2){
+  p<-paste(y," ~ ",x,sep="")
+
+  if(o > 1){
+    for(i in c(2:o)){
+      p<-paste(p," + I(",x,"^",i,")",sep="")
+    }
+  }
+  
+  return(p)
+}
+
+# This function performs the regression for the required polynomial expression
+cv.fit<-function(x, y, o=2){
+  f<-lm(formula=cv.formula(x,y,o), data=Boston)
+
+  return(f)
+}
+
+# This function performs the regression for the required polynomial expression and calculates its MSE
+cv.mse<-function(x, y, o=2){
+  mse<-mean(residuals(cv.fit(x,y,o))^2)
+
+  return(mse)
+}
+
+# This loop iteratively performs regression for the polynomial expressions with the specified range of degrees (1 to 100 in this case)
+for(i in c(1:100)){
+  ifelse(i==1,mse<-cv.mse("nox","dis",i),
+            mse<-c(mse,cv.mse("nox","dis",i)))
+}
+
+head(mse)
+```
+
+**Note that when iterating 10 times, the 10th order polynomial had the lowest MSE value. Therefore, I decided to try iterating 100 times to see where the ultimate lowest MSE might be found (see the result below).**
+
+What is the optimal degree?
+
+```{r q1d_opt, include=TRUE}
+min(which(mse==min(mse)))
+```
+
+**Now let's use Anova to see if the fit for this degree is statistically better than that for a degree that we looked at earlier (the 10th degree was the best fit we found prior to this cross validation exercise).**
+
+```{r q1d_anova, include=TRUE}
+anova(cv.fit("nox","dis",10),cv.fit("nox","dis",54))
+```
+
+**The Anova results above appear to confirm that the fit using optimal degree value (54) is statisitically better than the best fit achieved previously (using a 10th degree polynomial expression). **
+
+e) Use bs() to fit a regression spline with 4 degrees of freedom.
+
+```{r q1e_bs, include=TRUE}
+f.q1e<-lm(dis~bs(nox,4),data=Boston)
+```
+
+What are the knots used?
+
+```{r q1e_knots, include=TRUE}
+attr(bs(Boston$nox, df=4), "knots")
+```
+
+Plot the data and the fit.
+
+```{r q1e_plot, include=TRUE}
+ggplot(data=Boston, aes(x=nox, y=dis)) + geom_point() +
+  geom_line(aes(y=fitted(f.q1e)), colour="red")
+```
+
+Comment on the fit.
+
+**The fit is pretty good except for the highest values of dis, where it bypasses those data points.**
+
+Calculate the MSE.
+
+```{r q1e_mse, include=TRUE}
+mean(f.q1e$residuals^2)
+```
+
+f) Fit a curve using a smoothing spline with the automatically chosen amount of smoothing.
+
+```{r q1f_fit, include=TRUE}
+f.q1f<-smooth.spline(Boston$nox,Boston$dis, cv=T)
+
+f.q1f
+```
+
+Display the fit.
+
+```{r q1f_plot, include=TRUE}
+ggplot(data=Boston, aes(x=nox, y=dis)) + geom_point() +
+  geom_line(aes(y=fitted(f.q1f), colour="red"))
+```
+
+Does the automatic fit give a good result?
+
+**This apears to be a pretty good fit except for the highest values of dis, where it bypasses those data points.**
+
+g) Now use smoothing spline with a larger value of spar.
+
+```{r q1g_fit, include=TRUE}
+f.q1g<-smooth.spline(Boston$nox,Boston$dis,spar=1)
+```
+
+Overlay both smoothing spline fits on the plot.
+
+```{r q1g_plot, include=TRUE}
+ggplot(data=Boston,aes(x=nox,y=dis)) + geom_point() +
+  geom_line(aes(y=fitted(f.q1f)), colour="red") +
+  geom_line(aes(y=fitted(f.q1g)), colour="blue")
+```
+
+Which looks better?
+
+**The (blue) fit with the higher spar value appears to be slightly better than the previous (red) one (especially at the highest values of dis).**
+
+## Question 2
+
+Using the Boston data, with dis as the response and predictors medv, age and nox.
+
+a) Split the data into training 60% and test 40%.
+
+```{r q2a_train, include=TRUE}
+set.seed(123)
+s<-sample(seq(1, nrow(Boston)),0.6*nrow(Boston))
+Boston.train<-Boston[s,]
+Boston.test<-Boston[-s,]
+nrow(Boston.train)
+nrow(Boston.test)
+```
+
+Using the training data, fit a generalised additive model (GAM). Use ns with 4 degrees of freedom for each predictor.
+
+```{r q2a_fit, include=TRUE}
+f.q2a<-lm(dis ~ ns(medv,4) + ns(age,4) + ns(nox,4), data=Boston.train)
+```
+
+b) Use plot.gam to display the results.
+
+```{r q2b_plot, include=TRUE}
+par(mfrow=c(1,3))
+plot.Gam(f.q2a)
+```
+Does it appear if a linear term is appropriate for any of the predictors?
+
+**No. None of the above plots indicate linearity for their respective model.**
+
+c) Simplify the model fit in part (a). Refit the model.
+
+```{r q2c_fit, include=TRUE}
+f.q2c<-lm(dis ~ ns(nox,4), data=Boston.train)
+```
+
+Use anova to compare the two fits
+
+```{r q2c_anova, include=TRUE}
+anova(f.q2c, f.q2a)
+```
+
+and comment on your results.
+
+**The very low p-value in the Anova results above indicates that the unsimplified model (2) is a significantly (statistically speaking) better fit than the simplified model (1) with the medv and age predictors removed.**
+
+## Question 4
+
+a) For the training data in question 2, fit a tree model. Use dis as response, and predictors medv, age and nox.
+
+```{r q4a_fit_train, include=TRUE}
+f.q4a<-tree(dis ~ medv + age + nox, data=Boston.train)
+summary(f.q4a)
+```
+
+Draw the tree. 
+
+```{r q4a_plot, include=TRUE}
+plot(f.q4a)
+text(f.q4a)
+```
+
+Calculate the training and test MSE.
+
+```{r q4a_fit_test, include=TRUE}
+mse.train<-mean((predict(f.q4a) - Boston.train$dis)^2)
+paste("Training MSE =", round(mse.train,5))
+
+mse.test<-mean((predict(f.q4a, newdata=Boston.test) - Boston.test$dis)^2)
+paste("    Test MSE =", round(mse.test, 5))
+```
+
+b) Use cv.tree to select a pruned tree.
+
+```{r q4b_cvtree, include=TRUE}
+set.seed(123)
+cvtree <- cv.tree(f.q4a)
+plot(cvtree$size,cvtree$dev,type="b")
+```
+
+If pruning is required, fit and draw the pruned tree.
+
+```{r q4b_prune, include=TRUE}
+f.q4b<-prune.tree(f.q4a,best=4)
+summary(f.q4b)
+```
+
+Calculate the training and test MSE. 
+
+```{r q4b_mse, include=TRUE}
+mse.train.pruned<-mean((predict(f.q4b) - Boston.train$dis)^2)
+paste("Training MSE =", round(mse.train.pruned,5))
+
+mse.test.pruned<-mean((predict(f.q4b, newdata=Boston.test) - Boston.test$dis)^2)
+paste("    Test MSE =", round(mse.test.pruned, 5))
+```
+
+Compare the results to those in (a).
+
+**The training MSE value of the unpruned tree is less than that of the pruned tree which indicates that it makes a better fit for the training dataset. However, the pruned tree achieved a lower test MSE value than the unpruned tree did. This an indicator that the unpruned model may be overfitted vis a vis the training dataset.**
+
+c) Which fit is better, the (optionally pruned) tree or the GAM?
+
+```{r q2c_train, include=TRUE}
+mse.gam.train<-mean((predict(f.q2a)-Boston.train$dis)^2)
+paste("Training MSE (GAM) =", round(mse.gam.train,5))
+```
+
+**The GAM delivers a better (lower) MSE (0.7906) on the training dataset than that achieved by the pruned tree model (0.82112).**
+
+Compare their performance on the test data.
+
+```{r q2c_test, include=TRUE}
+mse.gam.test<-mean((predict(f.q2a, newdata=Boston.test)-Boston.test$dis)^2)
+paste("    Test MSE (GAM) =", round(mse.gam.test,5))
+```
+
+**The GAM delivers a worse (higher) MSE (1.29454) on the test dataset than that achieved by the pruned tree model (1.26445).**
+
+## Question 5
+
+For the data generated in question 6, Assignment 3:
+
+```{r q5_data, include=TRUE}
+set.seed(1)
+x <- rnorm(100)
+y <- 1 + .2*x+3*x^2+.6*x^3 + rnorm(100)
+d <- data.frame(x=x,y=y)
+```
+
+a) Fit a regression model containing predictors $X$, $X^2$, . . .$X^{10}$.
+
+```{r q5a_fit, include=TRUE}
+formula<-cv.formula("x","y",10)
+formula
+f.q5a<-lm(formula,data=d)
+summary(f.q5a)
+```
+
+Based on the output in summary() which terms are needed in the model?
+
+**The above output indicates that none of the terms are significant.**
+
+b) Fit a ridge regression model using the glmnet function over a grid of values for $\lambda$ ranging from 0.001 to 50.
+
+```{r q5b_ridge, include=TRUE}
+grid<-seq(0.001,50,length=100)
+x<-model.matrix(as.formula(formula),data=d)
+y<-d$y
+f.q5b<-glmnet(x,y,alpha=0,lambda=grid)
+summary(f.q5b)
+```
+
+Plot coefficients vs penalty using the default plot method.
+
+```{r q5b_plot, include=TRUE}
+plot(f.q5b)
+```
+
+
+Use the inbuilt function cv.glmnet to choose the tuning parameter $\lambda$.
+
+```{r q5b_cv, include=TRUE}
+set.seed(123)
+cv<-cv.glmnet(x,y,alpha=0)
+lambda.q5b<-cv$lambda.min
+lambda.q5b
+```
+
+How do the coefficients at the optimal value of $\lambda$ compare to the linear regression ones in (a)?
+
+```{r q5b_coef, include=TRUE}
+coefficients<-data.frame(lm=f.q5a$coefficients,ridge=coef(cv)[-2])
+coefficients
+```
+
+**As shown in the table above, the ridge regression cofficients (for the most part) follow a decreasing pattern culminating in their only negative value, while the values for the linear regression coefficients are more randomly distributed in terms of both value and sign.**
+
+c) Repeat (b) for lasso regression instead of ridge.
+
+Fit a Lasso regression model using the glmnet function over a grid of values for $\lambda$ ranging from 0.001 to 50.
+
+```{r q5c_lasso, include=TRUE}
+grid<-seq(0.001,50,length=100)
+x<-model.matrix(as.formula(formula),data=d)
+y<-d$y
+f.q5c<-glmnet(x,y,alpha=1,lambda=grid)
+summary(f.q5c)
+```
+
+Plot coefficients vs penalty using the default plot method.
+
+```{r q5c_plot, include=TRUE}
+plot(f.q5c)
+```
+
+
+Use the inbuilt function cv.glmnet to choose the tuning parameter $\lambda$.
+
+```{r q5c_cv, include=TRUE}
+set.seed(123)
+cv<-cv.glmnet(x,y,alpha=1)
+lambda.q5c<-cv$lambda.min
+lambda.q5c
+```
+
+How do the coefficients at the optimal value of $\lambda$ compare to the linear regression ones in (a)?
+
+```{r q5c_coef, include=TRUE}
+coefficients<-data.frame(lm=f.q5a$coefficients,lasso=coef(cv)[-2])
+coefficients
+```
+**As shown in the table above, apart from 4 zero values, the lasso regression coefficient values are all positive, unlike their linear regression equivalents.**
+
+d) Plot the data y vs x and superimpose the fitted models from linear regression, ridge and lasso with optimal values of lambda as chosen by cross-validation.
+
+```{r q5d_plot, include=TRUE}
+ridge.pred<-predict(f.q5b, s=lambda.q5b, 
+                      newx=model.matrix(as.formula(formula), data=d))
+lasso.pred<-predict(f.q5c, s=lambda.q5c,
+                      newx=model.matrix(as.formula(formula), data=d))
+
+ggplot(aes(x=x,y=y), data=d) +
+  geom_point() +
+  geom_line(aes(y=fitted(f.q5a)),colour="blue") +
+  geom_line(aes(y=ridge.pred),colour="red") +
+  geom_line(aes(y=lasso.pred),colour="green")
+```
+
+**It is remarkable, for this dataset at least, how similar the fits produced by linear, ridge and lasso regression have achieved are once the optimal value of lambda was used for the latter two methods.**

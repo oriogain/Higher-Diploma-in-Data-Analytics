@@ -1,0 +1,446 @@
+---
+title: "ST464 - Assignment 1 - Solutions"
+author: "Sean O'Riogain (18145426)"
+date: "27 February 2019"
+output: html_document
+---
+
+```{r setup, include=TRUE}
+knitr::opts_chunk$set(echo = TRUE)
+getwd()
+suppressPackageStartupMessages(library(tidyverse))
+```
+
+## Question 3
+
+The file eupop.txt contains the population and percentage distribution by age for EU countries in 1999. The age categories are 0-14 years, 15-44 years, 45-64 years and 65 years and over.
+
+```{r q3_eupop, include=TRUE}
+eupop <- read.table("eupop.txt", header=T, row.names=1)
+eupop <- eupop[,-5]
+```
+
+a) Construct the euclidean distance matrix of the percentage variables.
+
+```{r q3a_dist, include=TRUE}
+d<-dist(eupop,method='euclidian')
+head(d)
+```
+
+Use it to cluster the countries, using average linkage.
+
+```{r q3a_hclust, include=TRUE}
+h<-hclust(d,method='average')
+h
+```
+
+Draw the dendrogram and interpret.
+
+```{r q3a_dend, include=TRUE}
+dg<-plot(as.dendrogram(h))
+dg
+```
+
+<b>
+Looking at the above dendrogram from right to left, and in keeping with Tobler's 1st Law of geography, there seems to be a general grouping of countries geographically with some exceptions (in brackets):
+
+1. Southern (plus Germany, except Portugal);
+2. Nordic;
+3. Benelux (except Belgium);
+4. Austria & Portugal (randomly);
+5. Northwest (plus Belgium, except Ireland);
+6. Ireland.
+
+Combining the above clusters a bit more we get:
+
+1. Southern (plus Germany, except Portugal);
+2. Northern & Central (plus Portugal, except Germany and Ireland);
+3. Ireland.
+</b>
+
+Are there any outlier countries?
+
+**Ireland is a clear outlier, being the only country in a grouping (cluster) of its own.**
+
+**Taking a closer look at the underlying data below, we can see that, for instance, Ireland is the only country to have a population percentage of greater than 20 in the 0-14 age group and less than 12 in the 65+ group....** 
+
+```{r q3a_outlier, include=TRUE}
+rbind(eupop["Ireland",],head(eupop))
+
+subset(eupop,p014>20)
+subset(eupop,p65.<12)
+```
+
+(b) Examine the 3-cluster solution.
+
+```{r q3b_cutree1, include=TRUE}
+suppressPackageStartupMessages(library(dendextend))
+col<-cutree(h, 3, order_clusters_as_data=F)
+plot(color_branches(h, col=col+1))
+```
+
+Which countries belong to each of the three clusters?
+
+```{r q3b_cutree2, include=TRUE}
+col
+```
+
+Summarise the partitions with sumPartition (in h1code.R)
+
+```{r q3b_sumpar1, include=FALSE}
+sumPartition <- function(dat,z){
+  k <-length(unique(z))
+  nobs <- tapply(1:nrow(dat),z,length)
+  withinSS <- tapply(1:nrow(dat),z,function(i){
+    if (length(i)==1) 0
+    else {x<- dat[i,]
+    xm <- scale(x, scale=F)
+    sum(xm^2)
+    }
+  })
+  aveD <- tapply(1:nrow(dat),z,function(i){
+    if (length(i)==1) 0
+    else {x<- dat[i,]
+    xm <- scale(x, scale=F)
+    xm <- apply(xm, 1, function(y) sqrt(sum(y^2)))
+    mean(xm)
+    }
+  })
+  
+  maxD <- tapply(1:nrow(dat),z,function(i){
+    if (length(i)==1) 0
+    else {x<- dat[i,]
+    xm <- scale(x, scale=F)
+    xm <- apply(xm, 1, function(y) sqrt(sum(y^2)))
+    max(xm)
+    }
+  })
+  
+  part<- data.frame("N.obs"=nobs, "Within clus SS" = withinSS, "Ave dist  Centroid" = aveD,
+                    "Max dist centroid" =maxD)
+  rownames(part)<- paste("Cluster", 1:k)
+  
+  
+  
+  cCen <- cbind(simplify2array(tapply(1:nrow(dat),z,function(i){
+    x<- dat[i,]
+    if (length(i)==1) x
+    else {
+      colMeans(x)
+    }
+  })), colMeans(dat))
+  colnames(cCen)<- c(paste("Cluster", 1:k), "Grand centrd")
+  
+  cCenD <- as.matrix(dist(t(cCen[, -ncol(cCen)])))
+  cat("Final Partition\n")
+  cat("\n")
+  cat(paste("Number of clusters ", k))
+  cat("\n")
+  
+  cat("\n")
+  print(part, quote=F)
+  cat("\n")
+  cat("\n")
+  cat("Cluster centroids\n")
+  cat("\n")
+  print(cCen,quote=F)
+  cat("\n")	
+  cat("\n")
+  cat("Distances between Cluster centroids\n")
+  cat("\n")
+  print(cCenD,quote=F)	
+}
+```
+
+```{r q3b_sumpar2, include=TRUE}
+sumPartition(eupop, col)
+```
+
+Interpret your findings.
+
+<b>
+The first section (of 3) of the report above shows us that the data points in Cluster 2 are about two times more closely spaced than those in Cluster 3 (as per the ratio of their average and maximum distances from their respective centroids). As Cluster 1 contains only 1 data point which, therefore, is its centroid, whose its distance from itself is zero.
+
+The third (and final) section tells us that Cluster 2 is (almost) equidistant from both Cluster 1 and Cluster 3, while Cluster 1 and Cluster 3 are in relatively closer proximity to each other.
+
+</b>
+
+c) Use the kmeans algorithm to find another 3-cluster grouping of countries.
+
+```{r q3c_kmeans, include=TRUE}
+km<-kmeans(eupop, 3, nstart=100)
+str(km)
+```
+
+Which countries belong to each of the three clusters?
+
+```{r q3c_clustsum, include=TRUE}
+sort(km$cluster)
+```
+
+d) Construct a stars plot which shows the data and clustering obtained from kmeans.
+
+```{r q3d_stars, include=TRUE}
+stars(eupop, col.stars=km$cluster+1)
+```
+
+Optional:
+
+Can you think of a better way of showing the clusters?
+
+```{r q3b_opt1, include=TRUE}
+country<-rownames(as.matrix(km$cluster))
+cluster<-km$cluster
+df<-data.frame(country,cluster,eupop)
+head(df)
+
+ggplot(data=df, aes(x=cluster, fill=country)) +
+geom_bar()
+```
+
+Can you think of a way to present the data and the clustering results of both methods on the same graphical display?
+
+```{r q3b_opt2, include=TRUE}
+dat<-gather(df, key=age_grp, value=pct_pop, p014, p1544, p4564, p65.,
+            factor_key=T)
+
+ggplot(dat, aes(x=country, y=pct_pop,
+               fill=age_grp)) +
+  geom_bar(stat="identity") +
+  xlab("Country")+ylab("Population %") +
+  scale_fill_discrete(name = "Age Group", 
+                      labels=c("0-14", "15-44", "45-64", "65+")) +
+  facet_wrap(~cluster, scales="free") +
+  ggtitle("Population Percentages by Country & Cluster Number") +
+  coord_flip()
+```
+
+**This does the required job for the results of the kmeans method. The results of the hclust method could be combined with them, having manipulated (stacked) them in a similar way - plus adding 3 to their cluster numbers. The titles of the facet panels would then also need to be manipulated (using facet_wrap's labeller parameter) to display suitable text - e.g 'Cluster 1 (kmeans)' for the first, 'Cluster 1 (hclust)' for the fourth, etc. nrow and column parameter settings could be used to display both sets of facet panels on separate rows, if required.**
+
+## Question 4
+
+Music data from class.
+
+```{r q4_data, include=TRUE}
+music<-read.csv("music.csv")
+str(music)
+```
+
+a) Run the k-means algorithm over the range k = 1,....,15 clusters and record the total within cluster sum of squares (TWSS). Let nstart = 25.
+
+```{r q4a_kmeans, include=TRUE}
+music.feat<-music[, 4:8]
+music.feat<-scale(music.feat)
+glimpse(music.feat)
+
+twss<-rep(0, 15)
+kval<-c(1:15)
+
+for(k in c(1:15)){
+  km<-kmeans(music.feat, k, nstart=25)
+  kval[k]<-k
+  twss[k]<-km$tot.withinss
+}
+
+df<-data.frame(kval, twss)
+head(df)
+```
+
+Plot k versus TWSS....
+
+```{r q4a_plot, include=TRUE}
+plot(x=df$kval, y=df$twss, xlab="k", ylab="TWSS")
+```
+
+**Please note that I've chosen to plot TWSS versus k (instead of k versus TWSS), as TWSS is the response variable.**
+
+....and choose the best fitting number of clusters.
+
+**From the plot above, it looks like a k value of 6 would be a reasonable choice - on the basis that at that point, just over 1/3 of the way through the k-value range achieved just over a 2/3 reduction (305->94) in the TWSS value.** 
+
+What do you observe?
+
+**As expected the value of TWSS reduces (non-linearly - almost quadratically, in this case) as that of k increases.**
+
+**In this case, as the resultant curve is a relatively gradual, the position of an elbow isn't that clear-cut (unlike a similiar graph that we've seen in class).**
+
+b) Make a table of artist vs cluster solution from k = 5.
+
+```{r q4b_table, include=TRUE}
+km<-kmeans(music.feat, 5, nstart=25)
+str(km)
+
+tab<-cbind(km$cluster,as.character(music$Artist))
+head(tab)
+
+table(tab[,2], tab[, 1], useNA="ifany")
+```
+
+## Question 5
+
+Protein data. We want to study the similarities and differences in the protein composition of the diets of different countries.
+
+**Read in the data and extract the feature variables and scale them.**
+
+```{r q5_data, include=TRUE}
+# Read in the Protein data
+protein<-read.csv("protein.csv")
+str(protein)
+
+# Extract only the feature variables
+prot.feat<-protein[,-1]
+
+# Standardise to feature values to values in the range 0 to 10
+scale_0_10 <- function(x){((x-min(x))/(max(x)-min(x)))*10}
+prot.feat<-apply(prot.feat,2,scale_0_10)
+```
+
+Using any methods that you choose from this course or otherwise, write a brief summary.
+
+**Let's use kmeans clustering to identify groups of similar diets and compare them to identify the difference between them.**
+
+**The first step is to find the optimum number of clusters (k) to use.** 
+
+```{r q5_find_k, include=TRUE}
+# Find the optimum value of k to use
+
+# Create the data frame for plotting
+kval<-rep(0, 20)
+twss<-rep(0, 20)
+df<-data.frame(kval, twss)
+
+# Populate the data frame
+for(k in c(1:20)){
+  km<-kmeans(prot.feat, k, nstart=100)
+  df$kval[k]<-k
+  df$twss[k]<-km$tot.withinss
+}
+
+head(df)
+
+# Plot twss versus k
+plot(df$kval, df$twss, xlab="k", ylab="TWSS")
+```
+
+**Looking at the plot above, 4 looks like a reasonable choice of k, where TWSS is reduced by 60% after only 25% of values of k assessed.**
+
+**With only 25 observations in the Protein dataset, it won't make sense to have a large number of clusters anyway.**
+
+**Now to create those 4 clusters....**
+
+```{r q5_kmeans_4, include=TRUE}
+# Create the kmeans cluster data
+km<-kmeans(prot.feat, 4, nstart=100)
+
+prot<-data.frame(km$cluster, protein$Country, prot.feat, stringsAsFactors=T)
+colnames(prot)[1:2]<-c("Cluster", "Country")
+
+sort(km$cluster)
+```
+
+<b>
+In the table above, we can see that the countries fall into the following geographical/cultural (and political and economical) groupings:
+
+1. Nordic (x 4, EU/EEA-Capitalist-Tier 1);
+2. Mediterranean (x 4, EU/EEA-Capitalist-Tier 2);
+3. Slavic (x 6, Soviet Bloc-Communist-Tier 3);
+4. Other (x 11, Various).
+
+- Please note that these groupings are not necessarily listed in order of cluster number order (as that can vary from one execution to the next).
+
+As  USSR, West Germany, East Germany and Yugoslavia are included in the 25 countries in the dataset, in all probability it dates from either before, or shortly after, the fall of the Soviet Union.
+
+Note that the wealth tiering (from wealthiest to poorest) is a crude, anectotal indicator of my own creation.
+
+Of course, at first glance, at least, this clustering seems to make sense because the diet of a particular country will depend on its geopgraphic location (e.g. more fish consumed if it has a coastline).
+
+Geoography will also tend to influence the cultural, political and economic links between nations. There is also a link between political system (capitalism/democracy versus communism/dictatorship) and economic success.
+
+This, in turn, will also influence the diet of a countries inhabitants, in that more of the expensive forms of protein (e.g. red meat) will tend to be consumed in the wealthier countries.
+
+Let's see if increasing the number of clusters by 1 (k = 5) will split the 4th cluster above in some meaningful way.....
+</b>
+
+```{r q5_kmeans_5, include=TRUE}
+# Create the kmeans cluster data
+km<-kmeans(prot.feat, 5, nstart=100)
+
+# Combine the cluster numner and country with the protein feature data
+prot<-data.frame(km$cluster, protein$Country, prot.feat, stringsAsFactors=T)
+colnames(prot)[1:2]<-c("Cluster", "Country")
+
+# Sort the countries by cluster
+sort(km$cluster)
+```
+
+<b>
+In the table above, we can now see an improved grouping of the countries into the following clusters:
+
+1. Nordic (x 4, EU/EEA-Capitalist-Tier 1);
+2. Western (x 8, Eu/EEA-Capitalise-Tier 1);
+3. Slavic (x 5, Soviet Bloc-Communist-Tier 3);
+4. Balkan (x4, Soviet Bloc-Communist-Tier 4);
+5. Mediterranean (x 4, EU/EEA-Capitalist-Tier 2).
+
+Please note that:
+
+- These groupings are not necessarily listed in order of cluster number order (as that can vary from one execution to the next).
+- The cultural labels Slavic and Balkan are used in a very loose way, in that, for instance, Hungarians are not Slavs and Bulgaria is not in the Balkan Peninsula (although it does include the Balkan mountains).
+
+Now, let's use the Protein data to compare the dietary profiles of those 5 clusters......
+</b>
+
+```{r q5_plots, include=TRUE, results='asis'}
+
+# Stack the features
+dat<-gather(prot, key=Type, value=Units, RedMeat, WhiteMeat, Eggs, Milk,
+            Fish, Cereals, Starch, Nuts, Fr.Veg, factor_key=T)
+
+# Create a list for the plots
+plist <- list()
+
+# Generate, store and print the relevant plot for each cluster
+for(i in c(1:5)){
+  
+  # Throw a page to ensure thata maximum of 2 plots appear on each page
+  if(i != 1 & i %% 2 == 1){
+    cat("\n\n\\newpage\n")
+  }
+
+  dat_clust<-filter(dat, Cluster==i)
+  
+  plist[[length(plist) + 1]]<-ggplot(dat_clust,
+                                     aes(x=Country ,y=Units,
+                                         fill=Type)) +
+    geom_bar(stat="identity") +
+    xlab("Country")+ylab("Protein Units") + 
+    ggtitle(paste("Cluster", dat_clust$Cluster,
+                ": Protein Consumption Profile by Country")) +
+    theme(axis.text.x = element_text(angle = 30, vjust = 1, hjust=1))
+  
+  plot<-plist[[i]]
+  print(plot)
+}
+```
+
+<b>
+The insights gleaned from the protein consumption profile graphs above can be summarised as follows:
+
+1. As is to be expected, the protein consumption profiles of countries in the same cluster are similar (with a small number of notable variations - see below).
+2. EU/EEA countries in the Western and Mediterranean clusters - and Denmark in the Nordic cluster - have the highest overall protein consumptions - at 40-45 (standardised) units each on average.
+3. The Balkan cluster of communist countries have the lowest overall protein consumptions - at less than 30 units each on average - where Albania (probably the poorest country of the 25) is a prominent low-side outlier with less than 20 units.
+4. However, Albania doesn't appear to show any consumption of white meat, eggs, fish and starch, so this may be indicative of missing data and requires further examination.
+5. In the same cluster, Yugoslavia doesn't appear to show any consumption of red meat, which also requires further investigation for the same reason.
+6. In the Mediterranean cluster, Portugal shows no evidence of milk consumption, which also requires further investigation.
+7. In the Slavic cluster, East Germany doesn't appear to register any consumption of nuts, which also needs to be investigated.
+8. In the Nordic cluster, Finland appears to show no consumption of fruit and vegetables, which also warrants attention.
+9. As was expected, on average, the countries in the 3 EU/EEA clusters get a higher proportion of their protein consumption from the higher-value food types, such as red and white meat and fish, than the less affluent communist countries in the other 2 clusters.
+10. In the Western cluster, at over 50 units, France shows the highest consumption of protein of any of the 25 countries and, therefore, is a (slight) outlier at the high end.
+11. In the same cluster, being neighbouring islands, and having a common language, a shared history and a similar culture, the protein consumption profile of Ireland and Britain (UK) is very similar with practically the same total unit consumption.
+12. Countries in the Mediterranean and Nordic clusters exhibit higher than average fish consumption - due to their extensive coastlines, maritime traditions and large fishing fleets, presumably.
+13. Countries in the Mediterranean cluster show a higher than average consumption of fruit and vegetables - due to their favourable climatic conditions, presumably.
+14. Countries in the Nordic countries reveal a lower than average consumption of fruit and vegetables - due to their less favourable climatic conditions, presumably.
+15. Countries in the Slavic (communist) cluster, on average, have an overall protein consumption that is only slightly below that of their counterparts in the Western cluster - with Poland having an overall protein consumption that reaches the Western average.
+16. In the Nordic cluster, 3 of the 4 countries have an overall protein consumption that is below the average (with about 36 units each) for other EU/EEA  countries. Denmark is the exception here (with about 43 units).
+
+</b>
