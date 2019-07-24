@@ -1,0 +1,382 @@
+---
+title: "ST663 - Semester 1 - Assignment 3 - Solutions"
+author: "Sean O'Riogain (18145426)"
+date: "12 November 2018"
+output: html_document
+---
+
+```{r setup, include=TRUE}
+knitr::opts_chunk$set(echo = TRUE)
+getwd()
+```
+
+# Question 1
+
+The data in file census1.csv is obtained from www.censusatschool.ie. It contains observations
+from the Phase 14 census at school Ireland project. The data contains a sample of 97 students.
+
+The variables are Height FootR (right foot size) FootL (left foot size) in cm and Gender. Read the data into R and form a female only subset using the code below.
+
+```{r q1_data, include=TRUE}
+census <- read.csv("census1.csv")
+censusF <- subset(census, Gender=="F")
+str(censusF)
+head(censusF)
+```
+
+a) Construct a graph comparing FootR and FootL for females. 
+
+```{r q1_a, include=TRUE}
+boxplot(censusF$FootL,censusF$FootR,col=c(2:3),
+        names=c("Left Foot (F)","Right Foot (F)"),
+        ylab="Size (cm)")
+```
+
+
+Also use a suitable hypothesis test.
+
+State the appropriate null and alternative hypotheses.
+
+<b>
+Answer:
+
+$$H_0 : \mu_l-\mu_r=0$$
+
+$$H_A : \mu_l-\mu_r\neq0$$
+</b>
+
+Perform the test......
+
+```{r q1_a_hypo, include=TRUE}
+tails<-2                            # Two-tailed test
+
+n<-length(censusF[,1]);n            # Sample size
+df<-n-1;df                          # Degrees of Freedom
+
+diff<-censusF$FootL-censusF$FootR   # Compute difference
+
+xbar_diff<-mean(diff);xbar_diff     # Sample mean of diffs
+s_diff<-sd(diff);s_diff             # Sample Std Dev of diffs
+
+c<-0.95                             # Level of Conf. (assumed)
+alpha<-1-c;alpha                    # Level of Significance
+
+se_diff<-s_diff/sqrt(n);se_diff     # Standard Error of diffs
+
+z<-(xbar_diff - 0)/se_diff;z        # z-value
+
+pval<-tails*pnorm(-abs(z));pval     # p-value
+
+# Use t.test to sanity-check the calculated p-value
+t.test(diff,df=df,alternative="two.sided")
+```
+
+....and give your conclusions.
+
+**Answer: As the p-value (both manual & t.test) is greater than alpha (for a Level of Confidence assumed to be 0.95), we cannot reject $H_0$ and, therefore, we conclude (with the stated Level of Confidence) that, on average, there is no difference between left and right foot size in the general female population.**
+
+
+Check the normality of the relevant data using a QQ plot.
+
+```{r q1_a_qqplot, include=TRUE}
+par(mfrow=c(1,3))
+
+qqnorm(censusF$FootL,xlab="Left Foot (F)")  # QQPlot for Left
+qqline(censusF$FootL,col=2)
+
+qqnorm(censusF$FootR,xlab="Right Foot (F)") # QQPlot for Right
+qqline(censusF$FootR,col=3)
+
+qqnorm(diff,xlab="Difference")              # QQPlot for Diffs
+qqline(diff,col=4)
+```
+
+Interpret your results.
+
+**Answer: None of the above plots exhibit any approximation to a normal distribution, all having significant tails on both the left and right. In particular, the difference data shows a stepped, linear distribution with significant clustering of data points at the zero (especially), -1 and +1 (cm) plateaux.**
+
+b) Construct a graph comparing FootR for males and females.
+
+```{r q1_b_boxplot, include=TRUE}
+x<-subset(census, Gender=="F")$FootR # Extract the Female data
+y<-subset(census, Gender=="M")$FootR # Extract the Male data
+
+x<-na.omit(x)                        # Drop any NaNs
+y<-na.omit(y)                        
+
+head(x)                              # Take a peek at the data
+head(y)
+
+boxplot(x,y,col=c("red","blue"),     # Draw the box plots
+        names=c("Right Foot (Female)","Right Foot (Male)"),
+        ylab="Size (cm)")
+```
+
+Also use a suitable confidence interval.
+
+```{r q1_b_ci, include=TRUE}
+mx<-mean(x);mx                     # Mean (Female)
+sx<-sd(x);sx                       # Standard Dev. (Female)
+
+my<-mean(y);my                     # Mean (Male)
+sy<-sd(y);sy                       # Standard Dev. (Male)
+
+n<-length(x);n                     # Sample size (Female)
+m<-length(y);m                     # Sample size (Male)
+
+s<-sqrt(((n-1)*sx^2 + (m-1)*sy^2)/(n+m-2));s # Sample Std. Dev
+
+se<-s*sqrt(1/n+1/m);se             # Standard Error of diffs
+
+t<-qt(.975,df=n+m-2);t             # t-value
+
+e<-t*se;e                          # Margin of error
+
+cil<-mx - my - e;cil               # Confidence Interval(low)
+ciu<-mx - my + e;ciu               # Confidence Interval(high)
+
+t.test(x,y)
+```
+
+Interpret your interval.
+
+**Answer: We are 95% confident that the average difference in the size of the right foot between males and females in the general population falls within the range of 2.28 to 6.62 cm (in favour of the males).**
+
+Check the normality of the relevant data using a QQ plot.
+
+```{r q1_b_qqplot, include=TRUE}
+par(mfrow=c(1,2))
+
+qqnorm(x,xlab="Right Foot (F)")             # QQPlot for women
+qqline(x,col="red")
+
+qqnorm(y,xlab="Right Foot (M)")             # QQPlot for men
+qqline(y,col="blue")
+```
+
+Interpret your findings.
+
+**Answer: Neither the female or male sample data sets follow a normal distribution, having significant tails to the right and left.**
+
+# Question 2
+
+Of a random sample of 750 local residents, 400 were strongly opposed to the location of a hospital in the area. Does the sample provide sufficient evidence to conclude that a majority of residents oppose the new hospital?
+
+a) What is the null hypothesis? What is the alternative hypothesis?
+
+**Answer:**
+
+$$H_0: p_{opposed} <= 0.50$$
+
+$$H_A: p_{opposed} > 0.50$$
+
+b) Perform the hypothesis test.
+
+```{r q2_b, include=TRUE}
+p<-0.50                                 # Population proportion (as per H0)
+n<-750                                  # Sample size                      
+m<-400                                  # Sample 'successes'
+phat<-m/n;phat                          # Sample proportion
+
+c<-0.95                                 # Level of Confidence (assumed)
+alpha<-1-c;alpha                        # Level of Significance
+
+tails<-1;                               # This is a single (right)-tailed test
+
+if(n*phat > 10 & n*(1-phat) > 10){
+  print("The Normal distribution approximation condition is satisfied.")
+} else {
+  print("The Normal distribution approximation condition is not satisfied.")
+}
+
+se<-sqrt((p*(1-p))/n);se               # Standard error
+
+z<-(phat-p)/se;z                       # Test Statistic (z-value)
+
+pvalue<-tails*pnorm(-abs(z));pvalue    # p-value
+
+## Let's check the calculated value of the p-value using prop.test (without correction)
+prop.test(x=m,n=n,p=p,alternative="greater",conf.level=c,correct=F)
+```
+
+Find the p-value.
+
+**Answer: 0.03394 is the calculated p-value.**
+
+State your conclusions.
+
+**Answer: As the p-value is less that alpha (0.05), we can reject the Null Hypothesis ($H_0$) and conclude that the majority of residents are opposed to the proposed location of the hospital (at the 95% Level of Confidence).**
+
+
+# Question 3
+
+Suppose you have been hired to estimate the percentage of adults who are illiterate. You take a random sample of 600 adults, and find (using a standard literacy test) that 65 of them are illiterate.
+
+a) Compute a 95% confidence interval for the percentage of the population who are illiterate.
+
+```{r q3_a, include=TRUE}
+n<-600                                # Sample size
+m<-65                                 # Sample 'successes'
+phat<-m/n;phat                        # Sample proportion
+c<-0.95                               # Level of Confidence (assumed)
+alpha<-1-c;alpha                      # Level of Significance
+
+# Check for Normal approximation
+
+if(n*phat>10 & n*(1-phat) > 10){
+  print("Normal distribution approximation condition is satisfied")} else{
+  print("Normal distribution approximation condition is NOT satisfied")
+}
+
+sep<-sqrt((phat*(1-phat))/n); sep     # Standard Error
+
+z<-round(abs(qnorm((alpha/2))),2);z   # z-value
+
+e<-z*sep;e                            # Margin of error
+
+cil<-phat-e;cil                       # Lower CI value
+ciu<-phat+e;ciu                       # Upper CI value
+
+## Let's check the calculated values of the Confidence Interval using prop.test (without correction)
+prop.test(x=m,n=n,conf.level=c,correct=F)
+
+```
+
+**Answer: (Calculated) 95% CI = (0.083, 0.133), when rounded to 3 decimal places**
+
+Interpret your results.
+
+**Answer: We can be 95% confident that the population illiteracy rate lies somewhere in the 8.3% to 13.3% range.**
+
+b) How many people would need to be surveyed if the percentage of the population who are illiterate is required to be estimated within + or - 1% with 95% confidence?
+
+$$se_p=\sqrt{\hat{p}(1-\hat{p})/n}$$
+
+$$se_p^2=\hat{p}(1-\hat{p})/n$$
+
+$$n=\hat{p}(1-\hat{p})/se_p^2$$
+
+$$e=z*se_p$$
+$$se_p=e/z$$
+
+$$n=\hat{p}(1-\hat{p})/(e/z)^2$$
+
+**Answer: In this case, we must find the value of n where the Margin of Error (e)=0.01 - i.e. n = 3711 (as shown below)**
+
+```{r q3_b, include=TRUE}
+n<-round((phat*(1-phat))/(0.01/z)^2);n
+```
+
+# Question 4
+
+In 1889, Geissler collected data on 6,115 families of size 12. For each family the number of females was recorded.
+
+```{r q4_data, include=TRUE}
+female <- 0:12
+nfamilies <- c(7,45,181,478,829,1112,1343,1033,670,286,104,24,3)
+d <- data.frame(female=female, nfamilies=nfamilies)
+d
+```
+
+Are the data consistent with the assumption of a binomial distribution? 
+
+Answer this with a chi-squared test.
+
+Note: you will need to adjust the degrees of freedom, similar to the soccer data. You may need to pool the last two categories.
+```{r q4_probs, include=TRUE}
+dc<-d                                      # Copy the data
+po<-dc$nfamilies/sum(dc$nfamilies)         # Calculate data probabilities
+sum(po)                                    # Check observed probabilities
+dcp<-cbind(dc,po)                          # Append the observed probs.
+prob<-sum(dcp$female*dcp$nfamilies)/(12*sum(dcp$nfamilies));prob  # Female probability
+pt<-dbinom(x=c(0:max(dcp$female)),         # Generate the theoretical probs.
+           size=length(dcp$female)-1,      # (as per Binomial distribution)
+           prob=prob)
+sum(pt)                                    # Check the theoretical probs.
+dcp<-cbind(dcp,pt)                         # Append the theoretical probs.
+dcp                                        # Display the data with po and pt
+plot(dcp$female-.1, dcp$po, lwd=4,         # Plot to compare po and pt
+     type="h",col="blue",
+     xlab="Females", ylab="Probabilities")
+lines(dcp$female+.1, dcp$pt, lwd=4,
+      type="h",col="red")
+```
+
+**The above plot shows a reasonable match between the observed and theoretical (Binomial) probabilities**
+
+**Let's perform the following hypothesis test:**
+
+$H_0$: $P_{observed}$ = $P_{theoretical}$
+
+$H_A$: $P_{observed}$ <> $P_{theoretical}$
+
+```{r q4_hypo_test, include=TRUE}
+pop<-sum(po[1:2])                           # Pool the first 2 and last 2
+pop<-c(pop,po[3:11])                        #   elements of po to avoid 
+pop[11]<-1-sum(pop)                         #   warning in chisq.test call
+
+ptp<-sum(pt[1:2])                           # Pool the first 2 and last 2
+ptp<-c(ptp,pt[3:11])                        #   elements of pt to avoid     
+ptp[11]<-1-sum(ptp)                         #   warning in chisq.test call
+
+pop<-pop*sum(d$nfamilies)                   # Scale pop back up (values too                                             #   small for chisq.test)
+
+ctest<-chisq.test(pop,p=ptp);ctest          # Perform the Chi Squared test
+
+pval<-1-pchisq(ctest$statistic, 9);pval
+```
+
+**Answer: As the p-value achieved above is less than that of alpha (assumed to be 0.05, in this case), we must reject $H_0$ and conclude that the sample data is not sufficiently close (for a 95% Level of Confidence) to a Binomial distribution.**
+
+# Question 5
+
+Market researchers know that background music can influence the mood and purchasing behaviour of customers.
+
+One study in a supermarket in Northern Ireland compared three treatments: no music, French accordion music and Italian string music. Under each condition, the researchers recorded the number of bottles of French, Italian and other wine purchased.
+
+```{r q5_data, include=TRUE}
+d<-matrix(c(30,39,30,11,1,19,43,35,35),nrow=3)
+rownames(d)<-c("French wine","Italian wine","Other wine")
+colnames(d)<-c("None","French music","Italian music")
+d
+```
+
+
+a) Is there a relationship between the type of wine purchased and the type of music that is playing?
+
+**Answer:**
+
+$H_0$ : There is no relationship between the type of wine purchased and the type of music that is playing.
+
+$H_A$ : There is a relationship between the type of wine purchased and the type of music that is playing.
+
+```{r q5_a, include=TRUE}
+tab<-d
+chisq.test(tab)
+```
+
+**As the p-value achieved above is less than alpha (assumed to be 0.05, in this case), we reject $H_0$ and conclude that there is a relationship between the type of wine purchased and the type of music that is playing.**
+
+
+b) If the store manager wishes to improve the proportion of French wine sold, what music should she play?
+
+Answer using a suitable barchart.
+
+```{r q5_b, include=TRUE}
+tab1 <- prop.table(tab,1)
+barplot(t(tab1), legend=T, col=2:4)
+```
+
+**Answer: The bar plots above indicate that, proportionately more bottles of French wine was sold while Italian music was playing than for any of the other two wine categories.Therefore, playing more Italian music (perversely) could help to sell more French wine.**
+
+c) Write a short summary of your conclusions.
+
+**Answer: In addition to the previous conclusion, the following points are worthy of note:**
+
+1. For this piece of analysis, we are assuming that, in a given period, the playing of music or not will not increase the average number of customers and that the same average number of bottles will be sold in total.
+
+2. As the playing of French music appears to suppress the sales of Italian wine, it might also be argued that playing more French music could benefit the sales of the other wine categories (including French wine).
+
+3. As the playing of no music appears to have more positive impact on the sales of Italian wine relative to the other 2 wine categories, playing less music might help to sell proportionally more Italian wine.
+
+4. The sales of wine in the 'Other' category appears to be relatively less influenced by whether or not music is played, so modifying the choice of music should have relatively less impact on the proportion of sales made in that category.

@@ -1,0 +1,447 @@
+---
+title: "ST663 - Semester 1 - Assignment 5 - Solutions"
+author: "Sean O'Riogain (18145426)"
+date: "11 December 2018"
+output: html_document
+---
+
+```{r setup, include=TRUE}
+knitr::opts_chunk$set(echo = TRUE)
+getwd()
+suppressMessages(library(tidyverse))
+```
+
+# Question 1
+
+Consider a multiple regression model which predicts the calories in breakfast cereals from sodium, potassium and sugar content in grams.
+
+Examine the regression results given below.
+
+```{r q1_setup, include=TRUE}
+library(knitr)
+df<-data.frame(x=c("(Intercept)","sodium","potass","sugars"),
+  matrix(c(83.0469,0.0572,-0.0193,2.3876,
+            5.1984,0.0215,0.0251,0.4066,
+            15.98,2.67,-0.77,5.87,
+            0.0000,0.0094,0.4441,0.0000),nrow = 4))
+names(df)<-c("","Estimate","Std. Error","t value","Pr(>|t|")
+kable(df)
+df<-data.frame(c("Residual standard error: 15.6 on 73 degrees of freedom",
+                 "Multiple R-squared: 0.3844, Adjusted R-squared: 0.3591",
+                 "F-statistic: 15.2 on 3 and 73 DF, p-value: 8.868e-08"))
+names(df)<-""
+kable(df)
+```
+
+
+One of the interpretations below is correct. Which is it? 
+
+
+Explain what is wrong with the others.
+
+
+a) Each extra gram of sugar increases calories by 2.39.
+
+**This is not correct because it would only be valid if the values of the the other predictor (independent) variables (i.e. sodium and potassium) were fixed.**
+
+b) Every extra gram of sodium is associated with a 0.0572 increase in average calories, for cereals with a given potassium and sugar content.
+
+**This is the correct interpretation of the coefficient (slope) value for a predictor (independent) variable in multiple linear regression. **
+
+c) Every extra calorie means the potassium content drops by 0.0193g.
+
+**This is not correct because it is treating calories as a predictor (independent) variable when, for this regression, it is the response (dependent) variable.**
+
+d) The model does not fit because R2 is only 38.4%.
+
+**The R2 value provides some indication on the linear 'strength' of the model (indicating some degree of weakness in this case) but it does not, in itself, invalidate the model.**
+
+**It merely indicates that 38.4% of the variation in the value of the response variable (Calories) is explainable by the model in question.**
+
+<p style="page-break-before: always">
+
+# Question 2
+
+2. The FDA recorded data on tar, nicotine, weight and carbon monoxide for 25 cigarette brands. The data is in file Cigarette.csv.
+
+```{r q2_data, echo=TRUE}
+d<-read.csv("Cigarette.csv")
+str(d)
+```
+
+a) Read in the data. Use pairs to make a plot of the 4 variables.
+
+```{r q2_a, echo=TRUE}
+pairs(d[,2:5])
+```
+
+Comment on the correlation between the variables.
+
+**Visually, in the plots above, there appears be a linear relationship (correlation) between tar and nicotene, tar and carbon monoxide, and nicotene and carbon monoxide, and, possibly, between weight and carbon monoxide.**
+
+Which of the three predictors has the hightest correlation with carbon.monoxide?
+
+```{r q2_a_cor, echo=TRUE}
+cor(d[,2:5])
+```
+
+**As shown in the carbon.monoxide column above, tar and nicotine have the highest (strongest) positive correlations (in decending order). **
+
+The lowest?
+
+**That column also shows that Weight has the lowest (weakest) correlation.**
+
+Are there any outliers evident?
+
+**In the pairs plot above, there is evidence that there is at least one outlier for all 3 predictors (tar, nicotine and weight).**
+
+**The following boxplots support those observations.**
+
+```{r q2_a_box, echo=TRUE}
+par(mfrow=c(1,4))
+boxplot(d$tar,xlab="Tar")
+boxplot(d$nicotine,xlab="Nicotine")
+boxplot(d$weight,xlab="Weight")
+boxplot(d$carbon.monoxide,xlab="Carbon Monoxide")
+```
+
+b) Fit the regression model relating carbon.monoxide to tar, nicotine and weight.
+
+```{r q2_b, echo=TRUE}
+f<-lm(data=d,carbon.monoxide~tar+nicotine+weight)
+
+summary(f)
+```
+
+Write down the regression equation relating carbon monoxide to tar, nicotine and weight.
+
+$$y_{carbon.monoxide}=3.20+0.96*tar-2.63*nicotine-0.13*weight$$
+
+c) Interpret $\beta_1$.
+
+**A single unit increase in the Tar value will result in an increase of 0.96 in Carbon Monoxide value, where the Nicotine and Weight values are fixed.**
+
+Find a 95% confidence interval for $\beta_1$.
+
+```{r q2_c, echo=TRUE}
+ci<-confint(f,"tar");ci
+```
+
+Interpret this interval carefully in words.
+
+**A single unit increase in the Tar value will result in a change in the range of 0.46 and 1.47 in the Carbon Monoxide value (with 95% confidence), assuming that both the Nicotine and Weight values are fixed.**
+
+d) Interpret $\beta_2$.
+
+**A single unit increase in the Nicotine value will result in a decrease of 2.63 in the Carbon Monoxide value, where the Tar and Weight values are fixed.**
+
+Test H0 : $\beta_2=0$ versus Ha : $\beta_2 \neq 0$.
+
+```{r q2_d, echo=TRUE}
+summary(f)
+```
+
+**As the p-value for Nicotine is approximately 0.51 and, therefore, greater than 0.05, we cannot reject the Null hyppthesis and must conclude (with 95% confidence) that Nicotine does not signicantly influence the Carbon Monoxide value.**
+
+e) Interpret $\beta_3$.
+
+**A single unit increase in the Weight value will result in a decrease of 0.13 in the Carbon Moonoxide value, where the Tar and Nicotine values are fixed.**.
+
+Test H0 : $\beta_3=0$ versus Ha : $\beta_3 \neq 0$.
+
+**As the p-value for Weight is 0.97 and, therefore, is greater than 0.05, we cannot reject the Null hyppthesis and must conclude (with 95% confidence) that Weight does not significantly influence the Carbon Monoxide value.**
+
+f) Which of the three predictors is most important in explaining the response?
+
+**Because its p-value of approximately 0.0007 is (much) lower than 0.05, Tar is the most important predictor.**
+
+g) What is the estimate of $\sigma$ in the fit?
+
+**As per the summary of the results of the lm function above, 1.446 (Residual standard error) is the estimate of sigma for this model.**
+
+What is R2?
+
+**As per the summary of the results of the lm function above, 0.9186 (Multiple R-Squared) is the R2 estimate for this model.**
+
+h) Use the model to estimate the mean carbon.monoxide for brands with tar=10, nicotine=1 and weight = .9.
+
+```{r q2_h_mean, echo=TRUE}
+predict(f,data.frame(tar=10,nicotine=1,weight=0.9))
+```
+
+**The result of the predict function above indicates that the mean Carbon Monoxide value for such brands would be 10.08, approximately.**
+
+Find the associated confidence interval.
+
+```{r q2_h_conf, echo=TRUE}
+predict(f,data.frame(tar=10,nicotine=1,weight=0.9),interval="confidence")
+```
+
+Interpret this interval carefully in words.
+
+**The latest results of the predict function indicate (with a 95% level of confidence) that the mean Carbon Monoxide reading for brands with the specified Tar, Nicotine and Weight values, would be in the 7.79 to 12.36 range, approximately.**
+
+i) Use the model to predict the carbon.monoxide for a brand with tar=10, nicotine=1 and weight = .9.
+
+Find the associated prediction interval.
+
+```{r q2_i, echo=TRUE}
+predict(f,data.frame(tar=10,nicotine=1,weight=0.9),interval="prediction")
+```
+
+Interpret this interval carefully in words.
+
+**The latest results of the predict function indicate (with a 95% level of confidence) that the Carbon Monoxide reading for brands with the specified Tar, Nicotine and Weight values, would be in the 6.3 to 13.85 range, approximately.**
+
+j) Fit the reduced model with tar as the single predictor.
+
+```{r q2_j_a, echo=TRUE}
+f_tar<-lm(carbon.monoxide ~ tar, data=d)
+
+summary(f_tar)
+```
+
+Use anova to compare this reduced model with the model fit in part (c).
+
+```{r q1_j_b, echo=TRUE}
+anova(f_tar,f)
+```
+
+State the hypothesis being tested and give your conclusions carefully.
+
+<b>
+$H_0 : \beta_{nicotine}=\beta_{weight}=0$
+$H_A$ : At least one of $\beta_{nicotine}$, $\beta_{weight} \neq 0$
+</b>
+
+**As the p-value of 0.7937 achieved above is greater than 0.05, we cannot reject the Null hypothesis above, and conclude (with a 95% level of confidence) that we can omit the Nicotine and Weight predictors from the model.**
+
+<p style="page-break-before: always">
+
+# Question 3
+
+The file Real estate.csv has data on recent home sales in the home towns of students in a large U.S. Statistics class. In this question, you will look at how Price (in dollars) relates to living area (square feet) and number of bedrooms. Later you will also look at the location (urban, suburban or rural).
+
+Read in the data with
+
+```{r q3_data, echo=TRUE}
+house <- read.csv("Real_estate.csv")
+house1 <- house[150:250,c(1:3, 8)]
+house1$location.type <- factor(house1$location.type)
+
+str(house1)
+head(house1)
+```
+
+As the dataset is large, use the specified subset only, ie the dataset house1.
+
+a) Use pairs to make a plot of the 3 variables Price, Living.area and bedrooms. 
+
+```{r q3_a_pairs, echo=TRUE}
+pairs(house1[,1:3])
+```
+
+Comment on the correlation between the variables.
+
+```{r q3_a_cor, echo=TRUE}
+cor(house1[,1:3])
+```
+
+**The results of the cor function above indicate that Living Area has a weakly positive correlation with Price, while Bedrooms has a negligible (positive) correlation with Price.**
+
+Which of the predictors has the highest correlation with Price? 
+
+**Living Area has the higher (weakly positive) correlation with Price.**
+
+The lowest?
+
+**Bedrooms has the lower (negligibly positive) correlation with Price.**
+
+Are there any outliers evident?
+
+**The following boxplots reveal that the Bedrooms predictor has 3 data points that are in the outlier category.
+
+```{r q3_a_out, echo=TRUE}
+par(mfrow=c(1,2))
+boxplot(x=house1$Living.area,y=house1$Price,xlab="Living Area")
+boxplot(x=house1$bedrooms,y=house1$Price,xlab="Bedrooms")
+```
+
+b) Fit the regression model relating Price to Living.area and bedrooms. Call this fit f1. 
+
+```{r q3_b, echo=TRUE}
+f1<-lm(Price ~ Living.area + bedrooms, data=house1)
+
+summary(f1)
+```
+
+Write down the regression equation.
+
+$$y_{Price}=393569.62+175.46*{Living.area}-89690.08*{bedrooms}$$
+
+c) Interpret $\beta_1$.
+
+**A single unit increase in Living Area value will result in a 175.46 increase in the Price value, assuming that the Bedrooms value is fixed.**
+
+Find a 95% confidence interval for $\beta_1$.
+
+```{r q3_c, echo=TRUE}
+confint(f1,"Living.area")
+```
+
+Interpret this interval carefully in words.
+
+**A single unit increase in the Living Area value will result in a change in the Price value in the range of 85.13 to 265.793 (with 95% confidence), assuming that Bedroom value is fixed.** 
+
+d) Interpret $\beta_2$. Find a 95% confidence interval for $\beta_2$. 
+
+```{r q3_d, echo=TRUE}
+confint(f1,"bedrooms")
+```
+
+Interpret this interval carefully in words.
+
+**A single unit increase in the Bedrooms value will result in a decrease in the Price value in the range of 6712 to 172,668 (with 95% confidence), assuming that Living Area value is fixed.**
+
+**Comment: The Bedrooms variable does not appear to be a good predictor because of its extremely wide CI and because it indicates the Price decrease as the number of Bedrooms increase.**
+
+e) What is the estimate of $\sigma$ in the fit?
+
+**The sigma estimate is 282,200 (the Residual Standard Error figure in the summary of the results of the lm function call for this fit above).**
+
+What is $R^2$?
+
+**0.1365 is the R2value for this model (the Multiple R-Squared value in the summary of the results of the lm function call for this fit above).**
+
+f) Use your fit to predict the Price of a house with Living.area=2800 and bedrooms=3.
+
+```{r q3_f_pred, echo=TRUE}
+predict(f1,data.frame(Living.area=2800,bedrooms=3))
+```
+
+**As shown above, the current model predicts a Price value of 615,778 for the specified house type.**
+
+Find the associated prediction interval.
+
+```{r q3_f_pi, echo=TRUE}
+predict(f1,data.frame(Living.area=2800,bedrooms=3),interval="prediction")
+```
+
+Interpret this interval carefully in words.
+
+**The latest results of the predict function indicate (with a 95% level of confidence) that the Pricevalue for the specified type of house would be in the  46,865 to 1,1184,701 range, approximately.**
+
+**Refer to my previous comment in relation to relying on Bedrooms as a predictor in this model.**
+
+(g) Assess the model assumptions. (See the code at the end of question 4).
+
+```{r q3_g, echo=TRUE}
+suppressMessages(library(car))
+residualPlots(f1, tests=F)
+plot(f1,which=2)
+```
+
+**The above plots clearly indicate that two of the main assumptions of linear regression (i.e. that the residuals are normally distributed and with constant variance) are not satisfied by this model. Living Area appears to do better on the constant variance front.**
+
+<p style="page-break-before: always">
+
+# Question 4
+
+For the house1 data of the previous question we will look at how the Price varies with location.type.
+
+```{r q4_fit, echo=TRUE}
+levels(house1$location.type)
+
+levels(house1$location.type)<-c("Rural","Suburban","Urban")
+
+levels(house1$location.type)
+
+f2<-lm(Price ~ location.type, data=house1)
+
+summary(f2)
+```
+
+a) Draw boxplots for the Price for each group.
+
+```{r q4_a_box, echo=TRUE}
+levels(house1$location.type)<-c("Rural","Suburban","Urban")
+
+ggplot(data=house1,aes(x=location.type,y=Price)) + geom_boxplot()
+```
+
+Comment on the differences between the groups.
+
+<b>
+1. It is suprising that house prices in Urban areas have a significantly tighter spread and lower price range than those in both Rural and Suburban areas.
+2. It is also surprising that Suburban and Rural areas have roughly the same median price and that Suburban prices have a greater spread than those in Rural areas.
+3. The relative lack of outliers is also remarkable.
+4. The previous comments indicate the need to review the spread of data across the location type for the selected sample of 101 houses (see below).
+<\b>
+
+```{r q4_a_group, echo=TRUE}
+group_by(house1,location.type) %>%
+  summarise(n())
+```
+
+**The above breakdown of data points by Location Type may well explain the comments in relation to the features of the boxplots above. In particular, the relatively size of the sample of Urban prices and, to a leser extent, of the Rural prices may be skewing the overall results.**
+
+Does it look like the variability is roughly constant across the 3 groups?
+
+**The following scatter plots show a lack of constant variance accross all 3 house locations - although the paucity of Urban data points doesn't lend itself to pattern recognition.**
+
+
+```{r q4_a_point, echo=TRUE}
+ggplot(house1,aes(Living.area,Price),color=location.type) + geom_point() + geom_smooth(method=lm,se=F) +facet_wrap(~location.type)
+```
+
+b) Fit a model relating Price to location.type. Call your fit f2. Use the anova function on the fit.
+
+```{r q4_b, echo=TRUE}
+f2<-lm(Price ~ location.type, data=house1)
+
+summary(f2)
+
+anova(f2)
+```
+
+What conclusions can you draw from this about location.type?
+
+**As the Anova results give a p-value (0.01541) for Location Type that is less than 0.05, we can conclude that Location Type is significant when explaining variation in Price.**
+
+c) What is the estimate of $\sigma$ in the fit?
+
+**291000 is the sigma (Residual standard error) for this model.**
+
+What is $R^2$?
+
+**0.08163 is the R2 (Multiple R-squared) value for this model.**
+
+Compare these values to those of fit f1.
+
+**The sigma value for f2 is greater than that of f1 and the R2 value for f2 is less than than for f1.**
+
+**This (esp. the R2 value) indicate that f1 does a better job of explaining variation in price - although neither of them are impressive.**
+
+d) Fit the model f3 <- lm(Price ~ Living.area+bedrooms+location.type, data=house1)
+
+Use anova to compare f1 and f3.
+
+```{r q4_d, echo=TRUE}
+f3 <- lm(Price ~ Living.area+bedrooms+location.type, data=house1)
+
+summary(f3)
+
+anova(f1,f3)
+```
+
+What do the results of the anova tell you?
+
+**As the p-value (0.008034) for the extended model is less than 0.05, we can conclude that the addition of Location Type to the f1 model can a significant contribution to explaining variation in Price.**
+
+e) Assess the model assumptions for the fit f3 based on the plots produced by the given code.
+
+```{r q4_e, echo=TRUE}
+library(car)
+residualPlots(f3, tests=F)
+plot(f3,which=2)
+```

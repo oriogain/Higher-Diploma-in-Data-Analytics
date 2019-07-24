@@ -1,0 +1,345 @@
+---
+title: "ST663 - Semester 1 - Assignment 4"
+author: "Sean O'Riogain (18145426)"
+date: "24 November 2018"
+output: html_document
+---
+
+```{r setup, include=TRUE}
+knitr::opts_chunk$set(echo = TRUE)
+getwd()
+library(tidyverse)
+```
+
+# Question 1
+
+We have data on ages in years from a random sample of 170 British husbands and their wives.
+
+```{r q1_data, include=TRUE}
+d <- read.table("Couples_Ages.txt", header=T)
+
+str(d)
+head(d)
+
+sum(is.na(d))           # Check for the presence of NA values in the data
+```
+
+**Note that this dataset contains no NA values.**
+
+a) Make a scatterplot of these data with Y=men and X=women. Superimpose the linear regresssion line.
+
+```{r q1_a, include=TRUE}
+ggplot (d, aes(x=WifesAge, y=HusbandsAge)) +
+geom_point() +
+geom_smooth(method="lm",se=F)
+```
+
+Describe the pattern in the data.
+
+**At first glance, the data broadly appears to fit a linear model having a positive slope, and with no obvious outliers.**
+
+b) Calculate the correlation coefficient.
+
+$$r=\frac{\Sigma(x_i - \bar x)(y_i-\bar y)}{(n-1)s_xs_y}$$
+
+```{r q1_b, include=TRUE}
+r<-sum((d$WifesAge-mean(d$WifesAge))*(d$HusbandsAge-mean(d$HusbandsAge)))/((nrow(d)-1)*sd(d$WifesAge)*sd(d$HusbandsAge));r
+
+cor(x=d$WifesAge,y=d$HusbandsAge)
+```
+
+Briefy describe what this coefficient reveals about the relationship between the ages of partners.
+
+**Because the value of r above (0.9385598) is greater than 0.9, linear association is very strong and positive for this dataset.**
+
+c) Fit the linear model relating the ages of men (Y) to those of women (X).
+
+```{r q1_c, include=TRUE}
+f<-lm(HusbandsAge~WifesAge, data=d);f
+```
+
+What is the intercept?
+
+```{r q1_c_inter, include=TRUE}
+bhat0<-round(as.numeric(f$`coefficients`[1]),4);
+
+paste("Intercept =",bhat0)
+```
+
+The slope?
+
+```{r q1_c_slope, include=TRUE}
+bhat1<-round(as.numeric(f$`coefficients`[2]),4);
+
+paste("Slope =",bhat1)
+```
+
+Interpret.
+
+**The above figures mean that, for this model, for two couples, where one wife is a year older than the other, almost the same age gap (0.9667) will apply to their respective husbands.**
+
+d) Deirdre is 60 years of age. Use the regression equation to predict the age of her husband.
+
+$$\hat y=\hat\beta_0+\hat\beta_1x$$
+
+```{r q1_d, include=TRUE}
+x<-60
+
+yhat<-bhat0+(bhat1*x);yhat
+
+paste("Prediction =",round(yhat,1))
+```
+
+Calculate a 95% prediction interval and interpret.
+
+# Question 2
+
+There is some evidence that drinking a moderate amount of wine helps prevent heart attacks.
+
+The data in wine.csv (on Moodle) gives yearly wine consumption (litres of alcohol from drinking wine, per person) and yearly deaths from heart disease (deaths per 100,000 people) in 19 developed nations.
+
+```{r q2_data, include=TRUE}
+wine <- read.csv("wine.csv", stringsAsFactors=F)
+
+str(wine)
+head(wine)
+
+sum(is.na(wine))        # Check for the presence of NA values in the data
+```
+
+**Note that this dataset contains no NA values.**
+
+a) Plot the data with yearly deaths on the y-axis. Superimpose the regression line.
+
+```{r q2_a, include=TRUE}
+f<-lm(Deaths~Wine,data=wine);f
+
+summary(f)
+
+plot(wine$Wine,wine$Deaths,pch=16)
+abline(f,col="blue")
+
+ggplot(aes(Wine,Deaths),data=wine) +
+  geom_point() +
+  geom_smooth(method="lm",se=F)
+
+```
+
+Describe the pattern in the data.
+
+**At first glance, apart from a single outlier, this dataset appears to conform to a broadly linear model of negative slope. The main body of the dataset appears to fan out (slightly) to the left.**
+
+b) Use the least squares regression line to estimate the effect of a 1 litre increase in wine consumption on the death rate.
+
+```{r q2_b, include=TRUE}
+bhat0<-as.numeric(f$coefficients[1]);bhat0
+bhat1<-as.numeric(f$coefficients[2]);bhat1
+```
+
+**The second figure above (i.e. the slope value) indicates that a 1-litre increase in wine consumption would result in a reduction of approximately 22 in the number of deaths.**
+
+c) Compute a 95% confidence interval for this effect.
+
+$$SSE = \Sigma_{i=1}^n(\hat y_i-y_i)^2$$
+$$s=\sqrt{SSE/(n-2)}$$
+$$S_{xx}=\Sigma{(x_i-\bar x)^2}$$
+$$SE=s/\sqrt{Sxx}$$
+
+
+$$MoE = t_{\alpha/2}(n-2)*SE$$
+
+```{r q2_c, include=TRUE}
+c<-0.95                                # Level of Confidence
+alpha<-1-c                             # Alpha
+alpha2<-alpha/2                        # Half Alpha
+n<-nrow(wine)                          # Sample size
+df<-n-2                                # Degrees of freedom
+
+sse<-sum(f$residuals^2);sse            # Sum of Squares for Errs (Residuals)
+
+s<-sqrt(sse/(n-2));s                   # Standard Deviation (Errs/Residuals)
+
+ssx<-sum((wine$Wine-mean(wine$Wine))^2);ssx  # Sum of squared deviations of
+                                             #    x from mean
+
+se.bhat1<-s/sqrt(ssx);se.bhat1         # Standard error for slope
+
+t<-abs(qt(alpha2,df=df));t             # t-value for 95% level of confidence
+
+moe<-t*se.bhat1;moe                    # Margin of error
+
+paste(c," CI for Slope = (",round(bhat1-moe,4),",",round(bhat1+moe,4),")",sep="")
+
+confint(f)                             # Compare above CI with confint o/put
+```
+
+Give your conclusions.
+
+**We can be 95% confident that the slope of the regression line for poulation as a whole lies somewhere in the range from -33.52 to -10.52, approximately.**
+
+d) Ireland is one of the countries in the data. What is the fitted value for Ireland?
+
+```{r q2_d_fit, include=TRUE}
+paste("Fitted Value for Ireland = ",round(f$fitted.values[which(wine$Country=="Ireland")],2))
+```
+
+What is the residual for Ireland?
+
+```{r q2_d_res, include=TRUE}
+paste("Residual for Ireland = ",round(f$residuals[which(wine$Country=="Ireland")],2))
+```
+
+e) Predict the yearly deaths from heart disease for a country whose yearly wine consumption is 4.5.
+
+$$\hat y_0=\hat\beta_0+\hat\beta_1x_0$$
+
+```{r q2_e_pred, include=TRUE}
+x0<-4.5                                      # Consumption
+
+yhat0<-bhat0+(bhat1*x0);yhat0                # Prediction
+
+paste("Prediction =",round(yhat0))
+```
+
+Calculate a 95% prediction interval
+
+$$\hat y_0=\hat\beta_0+\hat\beta_1x_0$$
+$$SE_{pred}(\hat y_0)=s\sqrt{1+\frac{1}{n}+\frac{(x_0-\bar x)^2}{Sxx}}$$
+where
+$$S_{xx}=\Sigma{(x_i-\bar x)^2}$$
+
+```{r q2_e_pi, include=TRUE}
+se<-s*sqrt(1 + (1/n) + (((x0-mean(wine$Wine))^2)/ssx))
+
+moe<-t*se;moe
+
+paste(c," PI for yhat0=", round(yhat0), " where x0=", x0, ": (",round(yhat0-moe,4),",",round(yhat0+moe,4),")",sep="")
+
+predict(f,data.frame(Wine=4.5),interval="prediction")
+```
+
+and interpret.
+
+**We are 95% confident that an annual consumption of 4.5 litres of wine per per person in the country in question would result in a death rate in the 22.76-276.34 range per 100,000 people in that country's population.**
+
+# Question 3
+
+For the trees data:
+
+a) Plot Volume versus Girth and superimpose the regression line.
+
+```{r q3_a, include=TRUE}
+str(trees)
+head(trees)
+
+sum(is.na(trees))        # Check for the presence of NA values in the data
+
+ggplot(data=trees,aes(x=Girth,y=Volume)) +
+  geom_point() +
+  geom_smooth(method="lm",se=F)
+```
+
+**Note that this dataset does not contain NA values.**
+
+Does the relationship look linear?
+
+**At first glance, the data broadly appears to fit a linear model having a positive slope, and with no obvious outliers.** 
+
+b) Now make the plot again and this time superimpose the regression line and a smooth.
+
+```{r q3_b, include=TRUE}
+ggplot(data=trees,aes(x=Girth,y=Volume)) +
+  geom_point() +
+  geom_smooth(method="lm",se=F) +
+  geom_smooth(se=F)
+```
+
+Does the relationship look linear?
+
+**The presence of the smooth now indicates the presence of some curvature.**
+
+c) Fit the regression plot relating Volume to Girth.
+
+```{r q3_c, include=TRUE}
+f<-lm(Volume~Girth,data=trees);f
+
+summary(f)
+```
+
+Construct the residuals versus fitted plot and the Normal plot of residuals.
+
+
+```{r q3_c_plot, include=TRUE}
+par(mfrow=c(1,2))
+plot(f,which=1:2)
+```
+
+In light of these plots, assess the model assumptions.
+
+**The above plots indicate that a significant amount of curvature exists in the data and that the residuals do not appear to follow a Normal distribution.**
+
+d) Construct the plot of part (b),
+
+i) taking a log transformation of y
+
+```{r q3_d_i, include=TRUE}
+volume.log<-log(trees$Volume)
+ggplot(data=trees,aes(x=Girth,y=volume.log)) +
+  geom_point() +
+  geom_smooth(method="lm",se=F) +
+  geom_smooth(se=F)
+```
+
+ii) taking a log transformattion of x and
+
+```{r q3_d_ii, include=TRUE}
+girth.log<-log(trees$Girth)
+ggplot(data=trees,aes(x=girth.log,y=Volume)) +
+  geom_point() +
+  geom_smooth(method="lm",se=F) +
+  geom_smooth(se=F)
+```
+
+iii) taking a log transformation of x and y.
+
+```{r q3_d_iii, include=TRUE}
+ggplot(data=trees,aes(x=girth.log,y=volume.log)) +
+  geom_point() +
+  geom_smooth(method="lm",se=F) +
+  geom_smooth(se=F)
+```
+
+In each case superimpose a straight line fit and a smooth.
+
+Which plot looks the most linear?
+
+**Plot iii) above appears to be the most linear one.**
+
+e) Fit the linear model corresponding to your favourite plot of part (d). Construct the residuals versus fitted plot and the Normal plot of residuals.
+
+```{r q3_e, include=TRUE}
+f<-lm(volume.log~girth.log);f
+
+summary(f)
+
+par(mfrow=c(1,2))
+plot(f,which=1:2)
+```
+
+In light of these plots, assess the model assumptions.
+
+f) Use the fit of part (e) to predict and obtain a prediction interval for the Volume of a tree whose Girth is 12.
+
+(Note if your fit uses log(y) you will need to calculate exp(p), if p is your prediction).
+
+```{r q3_f, include=TRUE}
+log12<-log(12)
+
+p<-predict(f,data.frame(girth.log=log12),interval="prediction");p
+
+p.exp<-exp(p);p.exp
+```
+
+Interpret your result.
+
+**We are 95% confident that a tree with a girth measurement of 12 would result in a volume measurement in the 22.49-28.58 range.**
